@@ -2,7 +2,6 @@ name: Import ReqIF to GitHub
 
 on:
   push:
-    # Trigger on change to requirements.reqif file at the root
     paths:
       - 'requirements.reqif' 
   workflow_dispatch:
@@ -23,20 +22,22 @@ jobs:
     # Single step to install dependencies and run the script from the root.
     - name: Install dependencies and Run import script
       
-      # NOTE: working-directory is OMITTED because all files are at the root.
-      
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        # The file path is simply the local filename at the root.
         REQIF_FILE: requirements.reqif 
         
       run: |
         echo "Starting execution in CWD: $(pwd)"
         
-        # 1. Install dependencies (requirements.txt is found at the root)
+        # === CRITICAL DEBUG STEP: Show all files checked out by the runner ===
+        echo "Contents of working directory:"
+        ls -la
+        echo "==================================================="
+
+        # 1. Install dependencies
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-        # 2. Run the import script (import_reqif_to_github.py is found at the root)
+        # 2. Run the import script
         python import_reqif_to_github.py
