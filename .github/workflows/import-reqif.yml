@@ -3,8 +3,8 @@ name: Import ReqIF to GitHub
 on:
   push:
     paths:
-      - 'requirements.reqif' 
-  workflow_dispatch:
+      - '**/*.reqif'        # triggers when any .reqif file is added, changed, or edited
+  workflow_dispatch:         # allows manual run from GitHub UI
 
 jobs:
   import:
@@ -14,7 +14,7 @@ jobs:
     - name: Checkout repository (Full Clone)
       uses: actions/checkout@v4
       with:
-        #  Critical Fix: Fetch full history to ensure all files are present.
+        # Full clone ensures all recent file changes are retrieved
         fetch-depth: 0 
 
     - name: Set up Python
@@ -27,19 +27,20 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
+        # Set REQIF_FILE to the local filename only, since it is at the root.
         REQIF_FILE: requirements.reqif 
         
       run: |
         echo "Starting execution in CWD: $(pwd)"
         
-        # DEBUG: Re-check contents to confirm files are here now.
-        echo "Contents of working directory after full clone:"
+        # FINAL DEBUG: Confirm files are now visible at the root
+        echo "Contents of working directory:"
         ls -la
         echo "==================================================="
 
-        # 1. Install dependencies
+        # 1. Install dependencies (all files are at the root)
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-        # 2. Run the import script
+        # 2. Run the import script (script is at the root)
         python import_reqif_to_github.py
