@@ -3,8 +3,8 @@ name: Import ReqIF to GitHub
 on:
   push:
     paths:
-      - '**/*.reqif'        # triggers when any .reqif file is added, changed, or edited
-  workflow_dispatch:         # allows manual run from GitHub UI
+      - '**/*.reqif' # triggers when any .reqif file is added, changed, or edited
+  workflow_dispatch: # allows manual run from GitHub UI
 
 jobs:
   import:
@@ -14,33 +14,34 @@ jobs:
     - name: Checkout repository (Full Clone)
       uses: actions/checkout@v4
       with:
-        # Full clone ensures all recent file changes are retrieved
-        fetch-depth: 0 
+        fetch-depth: 0 # Ensures all files are checked out
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Install dependencies and Run import script
-      
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        # Set REQIF_FILE to the local filename only, since it is at the root.
-        REQIF_FILE: requirements.reqif 
-        
+    # --- Step 1: Install dependencies using working-directory ---
+    - name: Install dependencies
+      # Set the working directory to the root, where requirements.txt is located.
+      working-directory: ${{ github.workspace }}
       run: |
-        echo "Starting execution in CWD: $(pwd)"
-        
-        # FINAL DEBUG: Confirm files are now visible at the root
-        echo "Contents of working directory:"
-        ls -la
-        echo "==================================================="
-
-        # 1. Install dependencies (all files are at the root)
+        echo "Installing dependencies from $(pwd)..."
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-        # 2. Run the import script (script is at the root)
+    # --- Step 2: Run the script using working-directory ---
+    - name: Run import script
+      # Set the working directory to the root, where the script is located.
+      working-directory: ${{ github.workspace }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        # The REQIF_FILE environment variable needs the full path from the root.
+        REQIF_FILE: requirements.reqif
+        
+      run: |
+        echo "Running script from $(pwd)..."
+        # The Python script uses the environment variable REQIF_FILE, 
+        # which is set above to 'requirements.reqif' and is found in this directory.
         python import_reqif_to_github.py
