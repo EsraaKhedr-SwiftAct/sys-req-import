@@ -3,8 +3,8 @@ name: Import ReqIF to GitHub
 on:
   push:
     paths:
-      - '**/*.reqif' # triggers when any .reqif file is added, changed, or edited
-  workflow_dispatch: # allows manual run from GitHub UI
+      - '**/*.reqif'        # Triggers for any .reqif file update
+  workflow_dispatch:         # Allows manual run from GitHub UI
 
 jobs:
   import:
@@ -21,27 +21,26 @@ jobs:
       with:
         python-version: '3.11'
 
-    # --- Step 1: Install dependencies using working-directory ---
-    - name: Install dependencies
-      # Set the working directory to the root, where requirements.txt is located.
-      working-directory: ${{ github.workspace }}
-      run: |
-        echo "Installing dependencies from $(pwd)..."
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    # --- Step 2: Run the script using working-directory ---
-    - name: Run import script
-      # Set the working directory to the root, where the script is located.
-      working-directory: ${{ github.workspace }}
+    # --- Consolidate steps and use 'working-directory' ---
+    - name: Install dependencies and Run import script
+      # CRITICAL FIX: Set the working directory to the subdirectory.
+      working-directory: SysReqImport
+      
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        # The REQIF_FILE environment variable needs the full path from the root.
-        REQIF_FILE: requirements.reqif
+        # Files are now relative to SysReqImport, so use the local filename only.
+        REQIF_FILE: requirements.reqif 
         
       run: |
-        echo "Running script from $(pwd)..."
-        # The Python script uses the environment variable REQIF_FILE, 
-        # which is set above to 'requirements.reqif' and is found in this directory.
+        echo "Contents of working directory ($PWD):"
+        ls -la
+        
+        # 1. Install dependencies (now runs inside SysReqImport)
+        echo "Installing dependencies..."
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # 2. Run the import script (now runs inside SysReqImport)
+        echo "Running import script..."
         python import_reqif_to_github.py
