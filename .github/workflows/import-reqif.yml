@@ -1,0 +1,43 @@
+name: Import ReqIF to GitHub
+
+on:
+  push:
+    # Trigger only when a .reqif file changes, optionally specifying the SysReqImport folder
+    paths:
+      - 'SysReqImport/*.reqif' 
+  workflow_dispatch:
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    #  CRITICAL FIX: Install dependencies and Run import script in one guaranteed step
+    - name: Install dependencies and Run import script
+      
+      # Forces the Current Working Directory (CWD) to SysReqImport for ALL commands in this step.
+      working-directory: SysReqImport 
+      
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        # The path is now a local filename since the CWD is set correctly.
+        REQIF_FILE: requirements.reqif 
+        
+      run: |
+        echo "Starting execution in CWD: $(pwd)"
+        
+        # 1. Install dependencies (requirements.txt is found locally)
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # 2. Run the import script (import_reqif_to_github.py is found locally)
+        python import_reqif_to_github.py
