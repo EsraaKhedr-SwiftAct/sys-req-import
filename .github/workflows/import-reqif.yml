@@ -11,15 +11,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout repository (Full Clone)
       uses: actions/checkout@v4
+      with:
+        #  Critical Fix: Fetch full history to ensure all files are present.
+        fetch-depth: 0 
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    # Single step to install dependencies and run the script from the root.
     - name: Install dependencies and Run import script
       
       env:
@@ -30,8 +32,8 @@ jobs:
       run: |
         echo "Starting execution in CWD: $(pwd)"
         
-        # === CRITICAL DEBUG STEP: Show all files checked out by the runner ===
-        echo "Contents of working directory:"
+        # DEBUG: Re-check contents to confirm files are here now.
+        echo "Contents of working directory after full clone:"
         ls -la
         echo "==================================================="
 
