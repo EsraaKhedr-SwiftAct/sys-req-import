@@ -3,13 +3,16 @@ name: Import ReqIF to GitHub
 on:
   push:
     paths:
-      - '**/*.reqif'
-  workflow_dispatch:
+      # CRITICAL: Triggers the workflow when ANY file ending in .reqif 
+      # is added, changed, or edited inside the SysReqImport directory.
+      - 'SysReqImport/**.reqif'
+      
+  workflow_dispatch: # Allows manual running from the GitHub Actions UI
 
-# 🔑 CRITICAL FIX: Add this permissions block
+# CRITICAL: Grants the necessary permissions for the GITHUB_TOKEN to create Issues.
 permissions:
-  contents: read  # Allow the checkout action to read the code
-  issues: write   # Allow the script to create issues
+  contents: read  # Required for actions/checkout to read the code
+  issues: write   # Required for your Python script to create new issues
 
 jobs:
   import:
@@ -19,7 +22,7 @@ jobs:
     - name: Checkout repository (Full Clone)
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 0 # Ensures full history and files are available
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -27,19 +30,20 @@ jobs:
         python-version: '3.11'
 
     - name: Install dependencies and Run import script
+      # CRITICAL: Sets the execution context to the subdirectory.
       working-directory: SysReqImport
       
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        REQIF_FILE: requirements.reqif
+        # The script is run from INSIDE the folder, so the path is just the filename.
+        REQIF_FILE: requirements.reqif 
         
       run: |
-        echo "Contents of working directory ($PWD):"
-        ls -la
+        echo "Starting script execution in: $(pwd)"
         
         # 1. Install dependencies
-        echo "Installing dependencies..."
+        echo "Installing Python dependencies from requirements.txt..."
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 

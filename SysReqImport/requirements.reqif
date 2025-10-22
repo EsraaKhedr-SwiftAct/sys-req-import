@@ -37,6 +37,12 @@
             <THE-VALUE>Optional: The system shall log errors with timestamp and severity.</THE-VALUE>
           </ATTRIBUTE-VALUE-STRING>
         </SPEC-OBJECT>
+        <SPEC-OBJECT IDENTIFIER="REQ-005">
+          <ATTRIBUTE-VALUE-STRING>
+            <THE-VALUE>Optional: The system shall log errors with timestamp and severity.</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+        </SPEC-OBJECT>
+
 
       </SPEC-OBJECTS>
     </REQ-IF-CONTENT>
