@@ -26,12 +26,6 @@
           </ATTRIBUTE-VALUE-STRING>
         </SPEC-OBJECT>
 
-        <SPEC-OBJECT IDENTIFIER="REQ-003">
-          <VALUES>
-            <ATTRIBUTE-VALUE-STRING THE-VALUE="The system shall support diagnostic communication over CAN according to UDS."/>
-          </VALUES>
-        </SPEC-OBJECT>
-
 
       </SPEC-OBJECTS>
     </REQ-IF-CONTENT>

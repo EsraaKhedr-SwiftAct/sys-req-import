@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """import_reqif_to_github.py
-Real version: parses .reqif files and creates GitHub issues (one per requirement).
+Real version: parses .reqif files and creates/synchronizes GitHub issues.
 Behavior:
-  - If GITHUB_TOKEN and GITHUB_REPOSITORY are provided (via Action), it will create issues.
+  - If GITHUB_TOKEN and GITHUB_REPOSITORY are provided (via Action), it will create/manage issues.
   - It avoids duplicates by checking existing issues for the same requirement ID.
+  - NEW: It closes any open 'requirement' issues in GitHub that are no longer found in the latest ReqIF file(s).
   - If REQIF_FILE env var is set, it will parse that path; otherwise it scans the repo for any .reqif files.
 """
 import os
@@ -13,6 +14,7 @@ import requests
 from pathlib import Path
 from urllib.parse import urljoin
 import time
+import re
 
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 GITHUB_REPOSITORY = os.getenv('GITHUB_REPOSITORY')  # owner/repo
@@ -108,7 +110,6 @@ def get_existing_issue_ids():
             title = it.get('title','') or ''
             body = it.get('body','') or ''
             # Look for IDs at the start of title like "REQ-001:"
-            import re
             m = re.match(r'\s*(?P<id>REQ[-_0-9A-Za-z]+)[:\s-]', title)
             if m:
                 existing_ids.add(m.group('id').strip())
@@ -143,6 +144,74 @@ def create_issue(requirement):
         print(r.status_code, r.text)
         return False
 
+# ----------------------------------------------------------------------
+# NEW FUNCTION: Closes issues that are no longer in the ReqIF file
+# ----------------------------------------------------------------------
+def close_stale_issues(latest_req_ids):
+    """
+    Retrieves all open issues labeled 'requirement' and closes those whose IDs 
+    are not found in the latest_req_ids set.
+    """
+    closed_count = 0
+    url = urljoin(API_BASE, 'issues')
+    # Filter by state=open and label=requirement
+    params = {'state': 'open', 'labels': ','.join(LABELS), 'per_page': 100}
+    
+    # 1. Fetch all open requirement issues
+    issues_to_check = []
+    issues_url = url
+    while issues_url:
+        r = requests.get(issues_url, headers=HEADERS, params=params)
+        if r.status_code != 200:
+            print('ERROR fetching open issues to check for staleness:', r.status_code, r.text)
+            return closed_count
+        items = r.json()
+        issues_to_check.extend(items)
+        
+        # Handle pagination
+        link = r.headers.get('Link','')
+        next_url = None
+        if 'rel="next"' in link:
+            parts = link.split(',')
+            for p in parts:
+                if 'rel="next"' in p:
+                    next_url = p[p.find('<')+1:p.find('>')]
+                    break
+        issues_url = next_url
+        params = None # Subsequent pages have params in link
+
+    # 2. Iterate and close stale issues
+    for issue in issues_to_check:
+        title = issue.get('title','')
+        issue_number = issue.get('number')
+        
+        # Extract the Requirement ID from the issue title (e.g., REQ-001: ...)
+        m = re.match(r'\s*(?P<id>REQ[-_0-9A-Za-z]+)[:\s-]', title)
+        
+        if m:
+            issue_req_id = m.group('id').strip()
+            
+            # Check if this ID is missing from the current ReqIF file
+            if issue_req_id not in latest_req_ids:
+                # Issue is stale, close it
+                close_url = urljoin(API_BASE, f'issues/{issue_number}')
+                close_payload = {'state': 'closed'}
+                
+                r = requests.patch(close_url, headers=HEADERS, json=close_payload)
+                if r.status_code == 200:
+                    print(f'CLOSED STALE ISSUE: {issue_req_id} (Issue #{issue_number})')
+                    closed_count += 1
+                else:
+                    print(f'FAILED to close issue {issue_req_id} (Issue #{issue_number}):', r.status_code, r.text)
+                
+                # Wait to respect rate limits
+                time.sleep(0.5)
+
+    return closed_count
+# ----------------------------------------------------------------------
+# END NEW FUNCTION
+# ----------------------------------------------------------------------
+
 def main():
     files = find_reqif_files()
     if not files:
@@ -152,8 +221,11 @@ def main():
 
     existing = get_existing_issue_ids()
     print('Existing requirement IDs in repo issues:', existing)
+    
+    # 1. Collect all valid IDs from the latest ReqIF file(s) and identify new requirements
+    all_latest_req_ids = set()
+    requirements_to_create = []
 
-    total_created = 0
     for f in files:
         print('Parsing', f)
         reqs = parse_reqif_file(f)
@@ -161,16 +233,29 @@ def main():
             rid = req['id']
             # normalize id (remove surrounding spaces)
             rid_norm = rid.strip()
-            if rid_norm in existing:
-                print(f'SKIP (exists): {rid_norm}')
-                continue
-            ok = create_issue(req)
-            if ok:
-                total_created += 1
-                existing.add(rid_norm)
-                # be gentle on API
-                time.sleep(0.5)
+            all_latest_req_ids.add(rid_norm)
+            
+            if rid_norm not in existing:
+                requirements_to_create.append(req)
+
+    # --- Step A: Create NEW Issues ---
+    total_created = 0
+    print(f'Found {len(requirements_to_create)} requirements to create.')
+    for req in requirements_to_create:
+        ok = create_issue(req)
+        if ok:
+            total_created += 1
+            # Add newly created ID to the set to prevent immediate re-creation checks
+            existing.add(req['id'].strip()) 
+            # Be gentle on API
+            time.sleep(0.5)
+            
     print(f'Done. Created {total_created} new issues.')
+    
+    # --- Step B: Close STALE Issues ---
+    # Now check if any existing issues are missing from the latest files
+    total_closed = close_stale_issues(all_latest_req_ids)
+    print(f'Done. Closed {total_closed} stale issues.')
 
 if __name__ == '__main__':
     main()
