@@ -1,10 +1,15 @@
-name: Import ReqIF
+name: Import Requirements from ReqIF
 
 on:
   push:
     paths:
-      - '**/*.reqif'   # Run whenever a .reqif file is added or changed
-  workflow_dispatch:    # Allow manual runs too
+      - '**/*.reqif'     # Trigger when any .reqif file is added or modified
+  workflow_dispatch:      # Allow manual trigger from Actions tab
+
+permissions:
+  contents: read          # Needed to read repo files (.reqif)
+  issues: write           # ✅ Needed to create/update GitHub Issues
+  projects: write         # ✅ Needed to add issues to Projects V2 boards
 
 jobs:
   import:
@@ -27,5 +32,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          CLOSE_MISSING_REQS: "true"   # Optional: auto-close deleted requirements
         run: |
           python .github/scripts/import_reqif_dynamic.py
