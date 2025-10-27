@@ -7,9 +7,9 @@ on:
   workflow_dispatch:      # Allow manual trigger from Actions tab
 
 permissions:
-  contents: read          # Needed to read repo files (.reqif)
+  contents: read          # Needed to read .reqif files from repo
   issues: write           # ✅ Needed to create/update GitHub Issues
-  projects: write         # ✅ Needed to add issues to Projects V2 boards
+  pull-requests: read     # (Optional) safe addition — avoids parser errors
 
 jobs:
   import:
