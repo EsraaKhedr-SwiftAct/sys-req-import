@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd">
+  <THE-HEADER>
+    <REQ-IF-HEADER IDENTIFIER="hdr-0001">
+      <CREATION-TIME>2025-10-27T12:00:00+00:00</CREATION-TIME>
+      <TITLE>Sample Requirements Set</TITLE>
+    </REQ-IF-HEADER>
+  </THE-HEADER>
+  <CORE-CONTENT>
+    <REQ-IF-CONTENT>
+      <DATATYPES>
+        <DATATYPE-DEFINITION-STRING IDENTIFIER="dt-str-1" LONG-NAME="String"/>
+        <DATATYPE-DEFINITION-INTEGER IDENTIFIER="dt-int-1" LONG-NAME="Integer"/>
+      </DATATYPES>
+      <SPEC-TYPES>
+        <SPEC-OBJECT-TYPE IDENTIFIER="type-req" LONG-NAME="Requirement">
+          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-id" LONG-NAME="Requirement ID" DATATYPE-REF="dt-str-1"/>
+          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-title" LONG-NAME="Title" DATATYPE-REF="dt-str-1"/>
+          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-priority" LONG-NAME="Priority" DATATYPE-REF="dt-str-1"/>
+          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-label" LONG-NAME="Label" DATATYPE-REF="dt-str-1"/>
+        </SPEC-OBJECT-TYPE>
+      </SPEC-TYPES>
+      <SPECIFICATIONS>
+        <SPECIFICATION IDENTIFIER="spec-001" LONG-NAME="System Requirements">
+          <SPEC-HIERARCHY>
+            <CHILDREN>
+              <SPEC-OBJECT-REF>so-001</SPEC-OBJECT-REF>
+            </CHILDREN>
+          </SPEC-HIERARCHY>
+        </SPECIFICATION>
+      </SPECIFICATIONS>
+      <SPEC-OBJECTS>
+        <SPEC-OBJECT IDENTIFIER="so-001" TYPE="type-req">
+          <ATTRIBUTE-VALUES>
+            <ATTRIBUTE-VALUE-STRING THE-VALUE="REQ-001">
+              <THE-DEFINITION>attr-id</THE-DEFINITION>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING THE-VALUE="The system shall power on">
+              <THE-DEFINITION>attr-title</THE-DEFINITION>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING THE-VALUE="High">
+              <THE-DEFINITION>attr-priority</THE-DEFINITION>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING THE-VALUE="Major Feature">
+              <THE-DEFINITION>attr-label</THE-DEFINITION>
+            </ATTRIBUTE-VALUE-STRING>
+          </ATTRIBUTE-VALUES>
+        </SPEC-OBJECT>
+      </SPEC-OBJECTS>
+    </REQ-IF-CONTENT>
+  </CORE-CONTENT>
+</REQ-IF>

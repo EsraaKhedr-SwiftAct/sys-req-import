@@ -1,0 +1,31 @@
+name: Import ReqIF
+
+on:
+  push:
+    paths:
+      - '**/*.reqif'   # Run whenever a .reqif file is added or changed
+  workflow_dispatch:    # Allow manual runs too
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          pip install requests strictdoc lxml
+
+      - name: Run ReqIF Import Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/import_reqif_dynamic.py
