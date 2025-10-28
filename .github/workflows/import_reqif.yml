@@ -1,23 +1,31 @@
-name: Import ReqIF to GitHub Issues
+name: Import ReqIF to GitHub
+
 on:
+  workflow_dispatch:
   push:
     paths:
-      - '**.reqif'
+      - '**/*.reqif'
+      - '.github/scripts/import_reqif_dynamic.py'
 
 jobs:
-  import:
+  import-reqif:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      projects: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests strictdoc-reqif
+        run: |
+          pip install requests
 
-      - name: Run ReqIF Import Script
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python .github/scripts/import_reqif_dynamic.py
+      - name: Ru
