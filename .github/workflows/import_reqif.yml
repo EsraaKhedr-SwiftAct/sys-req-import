@@ -5,10 +5,7 @@ on:
     paths:
       - "**/*.reqif"
       - "**/*.reqifz"
-  pull_request:
-    paths:
-      - "**/*.reqif"
-      - "**/*.reqifz"
+  workflow_dispatch:
 
 jobs:
   import-reqif:
@@ -32,7 +29,8 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests strictdoc-reqif
+          pip install requests
+          pip install git+https://github.com/strictdoc-project/reqif.git@main
 
       - name: 🧠 Run ReqIF → GitHub Import Script
         env:
