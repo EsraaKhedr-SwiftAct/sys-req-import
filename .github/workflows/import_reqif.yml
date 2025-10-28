@@ -13,7 +13,6 @@ jobs:
     permissions:
       contents: read
       issues: write
-      projects: write
 
     steps:
       - name: Checkout repository
@@ -28,4 +27,9 @@ jobs:
         run: |
           pip install requests
 
-      - name: Ru
+      - name: Run ReqIF Import Script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/import_reqif_dynamic.py
