@@ -29,7 +29,6 @@
           </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
       </SPEC-TYPES>
-
       <SPEC-OBJECTS>
         <SPEC-OBJECT IDENTIFIER="REQ-001" LONG-NAME="System Start-up Requirement" TYPE="REQ_TYPE_1">
           <VALUES>
