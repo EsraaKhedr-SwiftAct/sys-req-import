@@ -1,88 +1,242 @@
+#!/usr/bin/env python3
 import os
 import sys
 import glob
+import json
 import requests
-from strictdoc.export.reqif import reqif_to_strictdoc
-from strictdoc.core.document_tree import DocumentTreeReader
-from io import StringIO
+from reqif.parser import ReqIFParser, ReqIFZParser
 
-print("🚀 Starting ReqIF import script...")
-print("Working directory:", os.getcwd())
+# ============================================================
+# CONFIG
+# ============================================================
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO = os.getenv("GITHUB_REPOSITORY")
 
-# --- Locate the ReqIF file automatically ---
-reqif_files = glob.glob("**/*.reqif", recursive=True)
+if not GITHUB_TOKEN or not REPO:
+    print(" Missing required GitHub environment variables.")
+    sys.exit(1)
+
+REST_HEADERS = {
+    "Authorization": f"token {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json"
+}
+GRAPHQL_HEADERS = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Content-Type": "application/json"
+}
+GRAPHQL_URL = "https://api.github.com/graphql"
+
+# ============================================================
+#  Locate .reqif/.reqifz file
+# ============================================================
+reqif_files = glob.glob("**/*.reqif", recursive=True) + glob.glob("**/*.reqifz", recursive=True)
 if not reqif_files:
-    print("❌ No .reqif file found in the repository.")
+    print(" No ReqIF or ReqIFZ file found in the repository.")
     sys.exit(1)
 
 REQIF_FILE = reqif_files[0]
-print(f"📄 Found ReqIF file: {REQIF_FILE}")
+print(f" Found ReqIF file: {REQIF_FILE}")
 
-# --- GitHub setup ---
-repo = os.environ["GITHUB_REPOSITORY"]
-token = os.environ["GITHUB_TOKEN"]
-headers = {"Authorization": f"token {token}"}
-
-# --- Test API connectivity ---
-url = f"https://api.github.com/repos/{repo}/issues"
-test_data = {"title": "ReqIF Import Test", "body": "✅ GitHub API connection successful."}
-r = requests.post(url, headers=headers, json=test_data)
-print("🧩 Test issue creation:", r.status_code, r.text[:200])
-
-if r.status_code != 201:
-    print("❌ Unable to create test issue. Check token permissions.")
-    sys.exit(1)
-
-# --- Parse the ReqIF content dynamically ---
+# ============================================================
+# Parse ReqIF dynamically using reqif library
+# ============================================================
 try:
-    print("📦 Parsing ReqIF file using strictdoc...")
-    with open(REQIF_FILE, "r", encoding="utf-8") as f:
-        reqif_content = f.read()
-
-    # Convert ReqIF XML into StrictDoc format
-    strictdoc_content = reqif_to_strictdoc(reqif_content)
-    document_tree = DocumentTreeReader(StringIO(strictdoc_content)).read()
+    if REQIF_FILE.endswith(".reqifz"):
+        bundle = ReqIFZParser.parse(REQIF_FILE)
+    else:
+        bundle = ReqIFParser.parse(REQIF_FILE)
 except Exception as e:
-    print("❌ Failed to parse ReqIF:", e)
+    print("Failed to parse ReqIF file:", e)
     sys.exit(1)
 
-# --- Extract requirements ---
-requirements = {}
-for doc in document_tree.document_list:
-    for req in doc.free_texts + doc.requirements:
-        attrs = {a.title: a.value for a in getattr(req, "fields", [])}
-        rid = attrs.get("ID") or req.uid or "REQ-" + str(len(requirements) + 1)
-        title = attrs.get("Title") or getattr(req, "statement", rid)
-        desc = getattr(req, "statement", "") + "\n\n" + "\n".join([f"**{k}:** {v}" for k, v in attrs.items()])
-        requirements[rid] = {"title": title, "body": desc, "attrs": attrs}
+core = getattr(bundle, "core_content", None) or bundle
+spec_objects = getattr(core, "spec_objects", None) or []
+print(f" Parsed {len(spec_objects)} SpecObjects from ReqIF")
 
-print(f"🔍 Extracted {len(requirements)} requirements from ReqIF.")
+# ============================================================
+# Extract Requirements (Dynamic)
+# ============================================================
+requirements = {}
+for so in spec_objects:
+    rid = getattr(so, "identifier", None) or f"REQ-{len(requirements)+1}"
+    attrs = {}
+    values = getattr(so, "values", None) or getattr(so, "attribute_values", None) or []
+    for v in values:
+        name = getattr(v.definition, "long_name", None) or getattr(v.definition, "name", None)
+        value = getattr(v, "the_value", None) or getattr(v, "value", None)
+        if name:
+            attrs[name.strip()] = str(value).strip()
+
+    title = attrs.get("Title") or attrs.get("Name") or rid
+    desc_lines = [f"**{k}:** {v}" for k, v in attrs.items() if v]
+    body = "\n".join(desc_lines)
+    requirements[rid] = {"title": title, "body": body, "attrs": attrs}
+
+print(f" Extracted {len(requirements)} requirements.")
+
 if not requirements:
-    print("⚠️ No requirements found. Please verify the ReqIF structure.")
+    print(" No requirements found in the ReqIF file.")
     sys.exit(0)
 
-# --- Create or update GitHub issues ---
-created_count = 0
-for rid, req in requirements.items():
-    title = f"{rid}: {req['title']}"
-    body = req["body"]
+# ============================================================
+#  GitHub Issues Handling (Create / Update / Close)
+# ============================================================
+BASE_URL = f"https://api.github.com/repos/{REPO}"
 
-    # Check for an existing issue with same title
-    search_url = f"https://api.github.com/search/issues?q=repo:{repo}+in:title+{rid}"
-    search_resp = requests.get(search_url, headers=headers)
-    existing = search_resp.json().get("items", [])
+def list_issues():
+    issues = []
+    page = 1
+    while True:
+        resp = requests.get(f"{BASE_URL}/issues?state=all&per_page=100&page={page}", headers=REST_HEADERS)
+        if resp.status_code != 200:
+            print("Error listing issues:", resp.text)
+            break
+        batch = resp.json()
+        if not batch:
+            break
+        issues.extend(batch)
+        page += 1
+    return issues
 
+def find_issue(issues, rid):
+    for i in issues:
+        if i["title"].startswith(f"{rid}:"):
+            return i
+    return None
+
+def create_issue(reqid, info):
+    data = {"title": f"{reqid}: {info['title']}", "body": info["body"]}
+    r = requests.post(f"{BASE_URL}/issues", headers=REST_HEADERS, json=data)
+    return r.json() if r.status_code in (200,201) else None
+
+def update_issue(issue, info):
+    num = issue["number"]
+    data = {"title": f"{info['title']}", "body": info["body"]}
+    requests.patch(f"{BASE_URL}/issues/{num}", headers=REST_HEADERS, json=data)
+
+def close_issue(issue):
+    num = issue["number"]
+    requests.patch(f"{BASE_URL}/issues/{num}", headers=REST_HEADERS, json={"state": "closed"})
+
+issues = list_issues()
+existing_rids = {i["title"].split(":")[0] for i in issues}
+
+# Create / Update
+for rid, info in requirements.items():
+    existing = find_issue(issues, rid)
     if existing:
-        issue_url = existing[0]["url"]
-        print(f"✏️ Updating existing issue for {rid}")
-        r = requests.patch(issue_url, headers=headers, json={"title": title, "body": body})
+        print(f"Updating: {rid}")
+        update_issue(existing, info)
     else:
-        print(f"🆕 Creating issue for {rid}")
-        r = requests.post(url, headers=headers, json={"title": title, "body": body})
-        created_count += 1
+        print(f"Creating: {rid}")
+        create_issue(rid, info)
 
-    if r.status_code not in (200, 201):
-        print(f"⚠️ Failed to create/update issue {rid}: {r.status_code} {r.text[:200]}")
+# Close deleted
+to_close = existing_rids - set(requirements.keys())
+for rid in to_close:
+    print(f" Closing deleted requirement: {rid}")
+    issue = find_issue(issues, rid)
+    if issue and issue["state"] != "closed":
+        close_issue(issue)
 
-print(f"✅ Import complete. {created_count} new issues created / updated.")
+# ============================================================
+# 5️⃣ Get Project + Field IDs and Map Values
+# ============================================================
+def run_graphql(query, variables=None):
+    r = requests.post(GRAPHQL_URL, headers=GRAPHQL_HEADERS, json={"query": query, "variables": variables})
+    if r.status_code != 200:
+        raise Exception(f"GraphQL failed: {r.text}")
+    return r.json()
+
+query_projects = """
+query($owner:String!, $repo:String!) {
+  repository(owner:$owner, name:$repo) {
+    projectsV2(first:10) {
+      nodes {
+        id
+        title
+        fields(first:50) {
+          nodes { id name dataType }
+        }
+      }
+    }
+  }
+}
+"""
+owner, name = REPO.split("/")
+projects = run_graphql(query_projects, {"owner": owner, "repo": name})
+
+if not projects["data"]["repository"]["projectsV2"]["nodes"]:
+    print(" No projects found.")
+    sys.exit(0)
+
+project = projects["data"]["repository"]["projectsV2"]["nodes"][0]
+project_id = project["id"]
+fields = {f["name"].lower(): f for f in project["fields"]["nodes"]}
+print(f" Using project: {project['title']} ({project_id})")
+
+# Match the 3 fields
+priority_field = fields.get("priority")
+reqid_field = fields.get("system requirement id")
+label_field = fields.get("requirement label")
+
+# ============================================================
+# Assign Custom Field Values Dynamically
+# ============================================================
+mutation_template = """
+mutation($project:ID!, $item:ID!, $field:ID!, $value:String!) {
+  updateProjectV2ItemFieldValue(
+    input: {projectId:$project, itemId:$item, fieldId:$field, value:{text:$value}}
+  ) {
+    projectV2Item { id }
+  }
+}
+"""
+
+def update_field(item_id, field, value):
+    if not field or not value:
+        return
+    vars = {"project": project_id, "item": item_id, "field": field["id"], "value": str(value)}
+    run_graphql(mutation_template, vars)
+
+# Find the item in the project and assign values
+query_items = """
+query($project:ID!) {
+  node(id:$project) {
+    ... on ProjectV2 {
+      items(first:100) {
+        nodes { id content { ... on Issue { number title } } }
+      }
+    }
+  }
+}
+"""
+project_items = run_graphql(query_items, {"project": project_id})
+items = project_items["data"]["node"]["items"]["nodes"]
+
+for item in items:
+    content = item.get("content", {})
+    if not content:
+        continue
+    issue_number = content.get("number")
+    title = content.get("title", "")
+    rid = title.split(":")[0] if ":" in title else None
+    if rid not in requirements:
+        continue
+    req = requirements[rid]
+    attrs = req["attrs"]
+
+    # Assign values
+    if priority_field and "Priority" in attrs:
+        update_field(item["id"], priority_field, attrs["Priority"])
+    if reqid_field:
+        update_field(item["id"], reqid_field, rid)
+    if label_field:
+        label_val = attrs.get("Label") or attrs.get("Type") or "Story (Atomic Requirement)"
+        update_field(item["id"], label_field, label_val)
+
+print(" Completed ReqIF → GitHub synchronization with project fields.")
+
+
+
 

@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read          # Needed to read .reqif files from repo
-  issues: write           # ✅ Needed to create/update GitHub Issues
+  issues: write           #  Needed to create/update GitHub Issues
   pull-requests: read     # (Optional) safe addition — avoids parser errors
 
 jobs:
