@@ -3,18 +3,19 @@ name: Import Requirements from ReqIF
 on:
   push:
     paths:
-      - '**/*.reqif'     # Trigger when any .reqif file is added or modified
-  workflow_dispatch:      # Allow manual trigger from Actions tab
+      - '**/*.reqif'
+      - '**/*.reqifz'
+  workflow_dispatch:
 
 permissions:
-  contents: read          # Needed to read .reqif files from repo
-  issues: write           #  Needed to create/update GitHub Issues
-  pull-requests: read     # (Optional) safe addition — avoids parser errors
+  contents: read
+  issues: write
+  pull-requests: read
+  projects: write
 
 jobs:
   import:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,12 +27,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests strictdoc lxml
+          pip install requests reqif lxml
 
       - name: Run ReqIF Import Script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          CLOSE_MISSING_REQS: "true"   # Optional: auto-close deleted requirements
         run: |
           python .github/scripts/import_reqif_dynamic.py

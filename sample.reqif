@@ -1,57 +1,95 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd">
+        xsi:schemaLocation="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd reqif.xsd">
   <THE-HEADER>
-    <REQ-IF-HEADER IDENTIFIER="hdr-0001">
-      <CREATION-TIME>2025-10-27T12:00:00+00:00</CREATION-TIME>
-      <TITLE>Sample Requirements Set</TITLE>
+    <REQ-IF-HEADER>
+      <COMMENT>Example ReqIF file for testing GitHub import</COMMENT>
+      <CREATION-TIME>2025-10-28T10:00:00Z</CREATION-TIME>
+      <REQ-IF-TOOL-ID>ChatGPT ReqIF Generator</REQ-IF-TOOL-ID>
+      <REQ-IF-VERSION>1.0</REQ-IF-VERSION>
+      <SOURCE-TOOL-ID>ExampleTool</SOURCE-TOOL-ID>
     </REQ-IF-HEADER>
   </THE-HEADER>
+
   <CORE-CONTENT>
     <REQ-IF-CONTENT>
       <DATATYPES>
-        <DATATYPE-DEFINITION-STRING IDENTIFIER="dt-str-1" LONG-NAME="String"/>
-        <DATATYPE-DEFINITION-INTEGER IDENTIFIER="dt-int-1" LONG-NAME="Integer"/>
+        <DATATYPE-DEFINITION-STRING IDENTIFIER="DT_STRING" LONG-NAME="String" MAX-LENGTH="255"/>
       </DATATYPES>
+
       <SPEC-TYPES>
-      
-        <SPEC-OBJECT-TYPE IDENTIFIER="type-req" LONG-NAME="Requirement">
-          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-id" LONG-NAME="Requirement ID" DATATYPE-REF="dt-str-1"/>
-          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-title" LONG-NAME="Title" DATATYPE-REF="dt-str-1"/>
-          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-priority" LONG-NAME="Priority" DATATYPE-REF="dt-str-1"/>
-          <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-label" LONG-NAME="Label" DATATYPE-REF="dt-str-1"/>
+        <SPEC-OBJECT-TYPE IDENTIFIER="REQ_TYPE_1" LONG-NAME="Requirement Type">
+          <SPEC-ATTRIBUTES>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_ID" LONG-NAME="System Requirement ID" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_TITLE" LONG-NAME="Title" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_DESC" LONG-NAME="Description" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_PRIORITY" LONG-NAME="Priority" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_LABEL" LONG-NAME="Label" TYPE="DT_STRING"/>
+          </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
       </SPEC-TYPES>
-      <SPECIFICATIONS>
-        <SPECIFICATION IDENTIFIER="spec-001" LONG-NAME="System Requirements">
-          <SPEC-HIERARCHY>
-            <CHILDREN>
-              <SPEC-OBJECT-REF>so-001</SPEC-OBJECT-REF>
-            </CHILDREN>
-          </SPEC-HIERARCHY>
-        </SPECIFICATION>
-      </SPECIFICATIONS>
+
       <SPEC-OBJECTS>
-      
-        <SPEC-OBJECT IDENTIFIER="so-001" TYPE="type-req">
-          <ATTRIBUTE-VALUES>
-            <ATTRIBUTE-VALUE-STRING THE-VALUE="REQ-001">
-              <THE-DEFINITION>attr-id</THE-DEFINITION>
+        <SPEC-OBJECT IDENTIFIER="REQ-001" LONG-NAME="System Start-up Requirement" TYPE="REQ_TYPE_1">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_ID"/>
+              <THE-VALUE>REQ-001</THE-VALUE>
             </ATTRIBUTE-VALUE-STRING>
-            <ATTRIBUTE-VALUE-STRING THE-VALUE="The system shall power on">
-              <THE-DEFINITION>attr-title</THE-DEFINITION>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_TITLE"/>
+              <THE-VALUE>The system shall power on within 3 seconds.</THE-VALUE>
             </ATTRIBUTE-VALUE-STRING>
-            <ATTRIBUTE-VALUE-STRING THE-VALUE="High">
-              <THE-DEFINITION>attr-priority</THE-DEFINITION>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_DESC"/>
+              <THE-VALUE>Ensures system start-up time is within acceptable limits.</THE-VALUE>
             </ATTRIBUTE-VALUE-STRING>
-            <ATTRIBUTE-VALUE-STRING THE-VALUE="Major Feature">
-              <THE-DEFINITION>attr-label</THE-DEFINITION>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_PRIORITY"/>
+              <THE-VALUE>High</THE-VALUE>
             </ATTRIBUTE-VALUE-STRING>
-          </ATTRIBUTE-VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_LABEL"/>
+              <THE-VALUE>Functional</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+          </VALUES>
+        </SPEC-OBJECT>
+
+        <SPEC-OBJECT IDENTIFIER="REQ-002" LONG-NAME="Safety Shutdown Requirement" TYPE="REQ_TYPE_1">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_ID"/>
+              <THE-VALUE>REQ-002</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_TITLE"/>
+              <THE-VALUE>The system shall shut down safely in case of overheating.</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_DESC"/>
+              <THE-VALUE>This ensures hardware protection and prevents damage.</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_PRIORITY"/>
+              <THE-VALUE>Critical</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION REF="AD_LABEL"/>
+              <THE-VALUE>Safety</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+          </VALUES>
         </SPEC-OBJECT>
       </SPEC-OBJECTS>
+
+      <SPECIFICATIONS>
+        <SPECIFICATION IDENTIFIER="SPEC_1" LONG-NAME="System Requirements Specification">
+          <CHILDREN>
+            <SPEC-HIERARCHY IDENTIFIER="SH_1" OBJECT="REQ-001"/>
+            <SPEC-HIERARCHY IDENTIFIER="SH_2" OBJECT="REQ-002"/>
+          </CHILDREN>
+        </SPECIFICATION>
+      </SPECIFICATIONS>
     </REQ-IF-CONTENT>
   </CORE-CONTENT>
 </REQ-IF>
-
