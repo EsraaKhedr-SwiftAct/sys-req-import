@@ -55,7 +55,6 @@
             </ATTRIBUTE-VALUE-STRING>
           </VALUES>
         </SPEC-OBJECT>
-
         <SPEC-OBJECT IDENTIFIER="REQ-002" LONG-NAME="Safety Shutdown Requirement" TYPE="REQ_TYPE_1">
           <VALUES>
             <ATTRIBUTE-VALUE-STRING>

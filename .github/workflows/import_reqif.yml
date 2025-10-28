@@ -11,7 +11,8 @@ permissions:
   contents: read
   issues: write
   pull-requests: read
-  projects: write
+  id-token: write  # required for API auth
+  repository-projects: write  # ✅ correct permission for Projects v2
 
 jobs:
   import:
