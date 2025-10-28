@@ -29,7 +29,7 @@ from typing import Dict, Any, Tuple, Optional, List
 try:
     from reqif.parser import ReqIFParser, ReqIFZParser
 except Exception as e:
-    print("Could not import reqif parser: ", e)
+    print("⚠️ Could not import reqif parser: ", e)
     print("Install reqif (e.g. pip install reqif or strictdoc).")
     sys.exit(1)
 
@@ -40,7 +40,7 @@ CLOSE_MISSING = os.getenv("CLOSE_MISSING_REQS", "true").lower() in ("1", "true",
 REQIF_SEARCH = os.getenv("REQIF_FILE", "")  # optional override path
 
 if not GITHUB_TOKEN or not REPO:
-    print("Missing required GitHub environment variables (GITHUB_TOKEN, GITHUB_REPOSITORY).")
+    print("❌ Missing required GitHub environment variables (GITHUB_TOKEN, GITHUB_REPOSITORY).")
     sys.exit(1)
 
 REST_HEADERS = {
@@ -115,7 +115,7 @@ def parse_reqif(path: str) -> List[Dict[str, Any]]:
      { id: str, attributes: {name: value, ...}, title: str, body: str, checksum: str }
     """
 
-    print(f" Parsing ReqIF: {path}")
+    print(f"📄 Parsing ReqIF: {path}")
     try:
         if path.lower().endswith(".reqifz"):
             bundle = ReqIFZParser.parse(path)
@@ -154,7 +154,7 @@ def parse_reqif(path: str) -> List[Dict[str, Any]]:
 
     # If still empty, return empty list
     if not spec_objects:
-        print(" No spec objects found in parsed ReqIF; returning empty.")
+        print("⚠️ No spec objects found in parsed ReqIF; returning empty.")
         return []
 
     requirements = []
@@ -361,23 +361,23 @@ def update_project_field_text(project_id: str, item_id: str, field_id: str, text
     try:
         run_graphql(mutation, vars)
     except Exception as e:
-        print(f" Failed to set project field text (item {item_id}): {e}")
+        print(f"⚠️ Failed to set project field text (item {item_id}): {e}")
 
 # ---------- 5) Synchronization main ----------
 def sync():
     reqif_path = find_reqif_file()
-    print(f"Found ReqIF file: {reqif_path}")
+    print(f"📄 Found ReqIF file: {reqif_path}")
 
     requirements = parse_reqif(reqif_path)
-    print(f"Extracted {len(requirements)} requirements from ReqIF")
+    print(f"🔍 Extracted {len(requirements)} requirements from ReqIF")
 
     if not requirements:
-        print(" No requirements found.")
+        print("⚠️ No requirements found.")
         return
 
     # fetch issues
     issues = list_all_issues()
-    print(f"Found {len(issues)} existing issues in repo (including closed).")
+    print(f"📥 Found {len(issues)} existing issues in repo (including closed).")
 
     # build lookup of existing issues by reqid
     existing_reqids = set()
@@ -403,9 +403,9 @@ def sync():
             existing_meta = extract_meta_from_body(existing.get("body", "") or {}) or {}
             existing_checksum = existing_meta.get("checksum")
             if existing_checksum == req["checksum"]:
-                print(f" No change for {rid}, skipping update.")
+                print(f"✔️ No change for {rid}, skipping update.")
             else:
-                print(f" Updating issue for {rid} (changed).")
+                print(f"✏️ Updating issue for {rid} (changed).")
                 # update: update visible title and body (keep meta)
                 new_body = embed_meta_in_body(req["body"], meta)
                 # title: keep "<RID>: <title>"
@@ -600,3 +600,4 @@ if __name__ == "__main__":
     except Exception as e:
         print("❌ Error during sync:", e)
         sys.exit(1)
+
