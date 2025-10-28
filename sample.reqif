@@ -15,7 +15,6 @@
         <DATATYPE-DEFINITION-INTEGER IDENTIFIER="dt-int-1" LONG-NAME="Integer"/>
       </DATATYPES>
       <SPEC-TYPES>
-      
         <SPEC-OBJECT-TYPE IDENTIFIER="type-req" LONG-NAME="Requirement">
           <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-id" LONG-NAME="Requirement ID" DATATYPE-REF="dt-str-1"/>
           <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="attr-title" LONG-NAME="Title" DATATYPE-REF="dt-str-1"/>
