@@ -27,63 +27,47 @@ GRAPHQL_HEADERS = {
 GRAPHQL_URL = "https://api.github.com/graphql"
 
 # ============================================================
-# 1️⃣ Locate .reqif or .reqifz
+# 1️⃣ Locate .reqif/.reqifz file
 # ============================================================
 reqif_files = glob.glob("**/*.reqif", recursive=True) + glob.glob("**/*.reqifz", recursive=True)
 if not reqif_files:
-    print("❌ No ReqIF or ReqIFZ file found.")
+    print("❌ No ReqIF or ReqIFZ file found in the repository.")
     sys.exit(1)
 
 REQIF_FILE = reqif_files[0]
 print(f"📄 Found ReqIF file: {REQIF_FILE}")
 
 # ============================================================
-# 2️⃣ Parse ReqIF File (Universal)
+# 2️⃣ Parse ReqIF dynamically using reqif library
 # ============================================================
-print(f"📄 Parsing ReqIF: {REQIF_FILE}")
-
 try:
+    print(f"📄 Parsing ReqIF: {REQIF_FILE}")
     if REQIF_FILE.endswith(".reqifz"):
         bundle = ReqIFZParser.parse(REQIF_FILE)
     else:
-        parser = ReqIFParser()
-        try:
-            # Try newer parser interface
-            with open(REQIF_FILE, "r", encoding="utf-8") as f:
-                xml_data = f.read()
-            if hasattr(parser, "parse_string"):
-                reqif_document = parser.parse_string(xml_data)
-            else:
-                # Fallback for older versions
-                with open(REQIF_FILE, "r", encoding="utf-8") as f:
-                    reqif_document = parser.parse(f)
-            bundle = reqif_document
-        except Exception as e:
-            raise RuntimeError(f"Failed to parse ReqIF file: {e}")
+        bundle = ReqIFParser.parse(REQIF_FILE)
 except Exception as e:
     print(f"❌ Failed to parse ReqIF file: {e}")
     sys.exit(1)
 
-print("✅ ReqIF file parsed successfully.")
-
-# ============================================================
-# 3️⃣ Extract Requirements Dynamically
-# ============================================================
 core = getattr(bundle, "core_content", None) or bundle
 spec_objects = getattr(core, "spec_objects", None) or []
-print(f"🔍 Parsed {len(spec_objects)} SpecObjects")
+print(f"🔍 Parsed {len(spec_objects)} SpecObjects from ReqIF")
 
+# ============================================================
+# 3️⃣ Extract Requirements (Dynamic attributes)
+# ============================================================
 requirements = {}
+
 for so in spec_objects:
-    rid = getattr(so, "identifier", None) or f"REQ-{len(requirements)+1}"
+    rid = getattr(so, "identifier", None) or f"REQ-{len(requirements) + 1}"
     attrs = {}
     values = getattr(so, "values", None) or getattr(so, "attribute_values", None) or []
-
     for v in values:
         name = getattr(v.definition, "long_name", None) or getattr(v.definition, "name", None)
         value = getattr(v, "the_value", None) or getattr(v, "value", None)
         if name:
-            attrs[name.strip()] = str(value).strip()
+            attrs[name.strip()] = str(value).strip() if value else ""
 
     title = attrs.get("Title") or attrs.get("Name") or rid
     desc_lines = [f"**{k}:** {v}" for k, v in attrs.items() if v]
@@ -97,7 +81,7 @@ if not requirements:
     sys.exit(0)
 
 # ============================================================
-# 4️⃣ GitHub Issue Management
+# 4️⃣ GitHub Issues Handling (Create / Update / Close)
 # ============================================================
 BASE_URL = f"https://api.github.com/repos/{REPO}"
 
@@ -125,11 +109,11 @@ def find_issue(issues, rid):
 def create_issue(reqid, info):
     data = {"title": f"{reqid}: {info['title']}", "body": info["body"]}
     r = requests.post(f"{BASE_URL}/issues", headers=REST_HEADERS, json=data)
-    return r.json() if r.status_code in (200,201) else None
+    return r.json() if r.status_code in (200, 201) else None
 
 def update_issue(issue, info):
     num = issue["number"]
-    data = {"title": f"{reqid}: {info['title']}", "body": info["body"]}
+    data = {"title": f"{info['title']}", "body": info["body"]}
     requests.patch(f"{BASE_URL}/issues/{num}", headers=REST_HEADERS, json=data)
 
 def close_issue(issue):
@@ -139,7 +123,7 @@ def close_issue(issue):
 issues = list_issues()
 existing_rids = {i["title"].split(":")[0] for i in issues}
 
-# Sync Issues
+# Create / Update
 for rid, info in requirements.items():
     existing = find_issue(issues, rid)
     if existing:
@@ -158,7 +142,7 @@ for rid in to_close:
         close_issue(issue)
 
 # ============================================================
-# 5️⃣ Fetch Project + Field IDs from GitHub
+# 5️⃣ Get Project + Field IDs
 # ============================================================
 def run_graphql(query, variables=None):
     r = requests.post(GRAPHQL_URL, headers=GRAPHQL_HEADERS, json={"query": query, "variables": variables})
@@ -193,13 +177,13 @@ project_id = project["id"]
 fields = {f["name"].lower(): f for f in project["fields"]["nodes"]}
 print(f"📋 Using project: {project['title']} ({project_id})")
 
-# Map Fields Dynamically
+# Dynamic field lookup
 priority_field = fields.get("priority")
 reqid_field = fields.get("system requirement id")
 label_field = fields.get("requirement label")
 
 # ============================================================
-# 6️⃣ Update Field Values Dynamically
+# 6️⃣ Assign Custom Field Values
 # ============================================================
 mutation_template = """
 mutation($project:ID!, $item:ID!, $field:ID!, $value:String!) {
@@ -217,7 +201,7 @@ def update_field(item_id, field, value):
     vars = {"project": project_id, "item": item_id, "field": field["id"], "value": str(value)}
     run_graphql(mutation_template, vars)
 
-# Get project issues
+# Find items in the project
 query_items = """
 query($project:ID!) {
   node(id:$project) {
@@ -233,38 +217,37 @@ project_items = run_graphql(query_items, {"project": project_id})
 items = project_items["data"]["node"]["items"]["nodes"]
 
 # ============================================================
-# 7️⃣ Map Label Based on ReqIF Content
+# 7️⃣ Update fields for each issue
 # ============================================================
-def map_label(attrs):
-    label = attrs.get("Label", "").lower()
-    if "safety" in label:
-        return "Safety"
-    elif "performance" in label:
-        return "Performance"
-    elif "functional" in label:
-        return "Functional"
-    return "Functional"  # default fallback
-
 for item in items:
     content = item.get("content", {})
     if not content:
         continue
+
+    issue_number = content.get("number")
     title = content.get("title", "")
     rid = title.split(":")[0] if ":" in title else None
+
     if rid not in requirements:
         continue
 
     req = requirements[rid]
     attrs = req["attrs"]
 
-    if priority_field and "Priority" in attrs:
-        update_field(item["id"], priority_field, attrs["Priority"])
+    # Dynamic fields
     if reqid_field:
         update_field(item["id"], reqid_field, rid)
-    if label_field:
-        update_field(item["id"], label_field, map_label(attrs))
+    if priority_field and "Priority" in attrs:
+        update_field(item["id"], priority_field, attrs["Priority"])
 
-print("✅ Completed ReqIF → GitHub synchronization with dynamic labels and fields.")
+    # --- Hard-coded label ---
+    if label_field:
+        hardcoded_label = "System Requirement"
+        update_field(item["id"], label_field, hardcoded_label)
+        print(f"🏷️ Set Requirement Label for {rid} → {hardcoded_label}")
+
+print("✅ Completed ReqIF → GitHub synchronization with hardcoded Requirement Label.")
+
 
 
 
