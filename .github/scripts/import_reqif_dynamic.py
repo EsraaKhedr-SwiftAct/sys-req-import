@@ -1,276 +1,183 @@
-#!/usr/bin/env python3
-"""
-import_reqif_dynamic.py - FINAL ROBUST VERSION USING STRICTDOC'S REQIF LIBRARY
-
-- Uses the official 'reqif' Python library for robust parsing.
-- Creates/updates GitHub issues for each requirement.
-- Finds/creates ProjectV2 items and maps attribute values to project fields via GraphQL.
-- Hard-codes Requirement Label to "System Requirement" on the project field.
-"""
+# .github/scripts/import_reqif_dynamic.py
 
 import os
-import sys
-import glob
-import json
 import requests
-from typing import Dict, Any, Optional, List
+import json
+import glob
+from reqif.parser import ReqIFParser
+from reqif.exceptions import ReqIFException
 
-# --- New Library Import ---
-try:
-    from reqif.parser import ReqIFParser
-    from reqif.reqif_bundle import ReqIFBundle, ReqIFZBundle
-    from reqif.parser import ReqIFZParser
-except ImportError:
-    # This block should not execute if 'pip install reqif' ran successfully
-    print("❌ The 'reqif' library (strictdoc-project/reqif) is not installed.")
-    print("Please ensure 'pip install requests reqif' is run in your workflow.")
-    sys.exit(1)
+# --- Configuration and Constants ---
+REQIF_FILE_PATH = 'sample.reqif'
 
-# -------------------------
-# Configuration / Environment
-# -------------------------
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO = os.getenv("GITHUB_REPOSITORY")  # "owner/repo"
-PROJECT_NAME = os.getenv("PROJECT_NAME")
+# --- GitHub API Setup ---
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+# GITHUB_REPOSITORY is expected to be in the format 'owner/repo'
+GITHUB_REPOSITORY = os.environ.get('GITHUB_REPOSITORY') 
 
-if not GITHUB_TOKEN or not REPO:
-    print("❌ Missing GITHUB_TOKEN or GITHUB_REPOSITORY env vars.")
-    sys.exit(1)
+if not GITHUB_TOKEN or not GITHUB_REPOSITORY:
+    print("Error: GITHUB_TOKEN or GITHUB_REPOSITORY environment variable not set.")
+    exit(1)
 
-# REST headers for Issues API (token auth)
-REST_HEADERS = {
-    "Authorization": f"token {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json",
+REPO_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
+HEADERS = {
+    'Authorization': f'token {GITHUB_TOKEN}',
+    'Accept': 'application/vnd.github.v3+json'
 }
 
-# GraphQL headers (Bearer)
-GRAPHQL_HEADERS = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Content-Type": "application/json",
-}
+# --- ReqIF Parsing Function ---
 
-GRAPHQL_URL = "https://api.github.com/graphql"
-HARDCODED_REQUIREMENT_LABEL = "System Requirement"
-DEFAULT_FAILURE_BODY = "No description provided."
-# Updated marker ensures we update the previously failed issues
-BODY_VERSION_MARKER = ""
-
-# -------------------------
-# 1) Find ReqIF file
-# -------------------------
-reqif_files = glob.glob("**/*.reqif", recursive=True) + glob.glob("**/*.reqifz", recursive=True)
-if not reqif_files:
-    print("❌ No .reqif/.reqifz file found in repository.")
-    sys.exit(1)
-
-REQIF_FILE = None
-for f in reqif_files:
-    if f.lower().endswith((".reqif", ".reqifz")):
-        REQIF_FILE = f
-        break
-
-print(f"📄 Found ReqIF file: {REQIF_FILE}")
-
-# -------------------------
-# 2) ReqIF Parsing (using the 'reqif' library)
-# -------------------------
-def parse_reqif_lib(path: str) -> Dict[str, Dict[str, Any]]:
+def parse_reqif_file(filepath):
     """
-    Parses ReqIF file using the 'reqif' library.
+    Parses the ReqIF file. Returns a dictionary of requirements, 
+    keyed by REQ-ID, or an empty dictionary on failure.
+    Includes robust error handling for debugging parsing issues.
     """
     try:
-        if path.lower().endswith(".reqifz"):
-            reqif_z_bundle: ReqIFZBundle = ReqIFZParser.parse(path)
-            if not reqif_z_bundle.reqif_bundles:
-                 print("⚠️ ReqIFZ file contains no ReqIF bundles.")
-                 return {}
-            reqif_bundle: ReqIFBundle = list(reqif_z_bundle.reqif_bundles.values())[0]
-        else:
-            reqif_bundle: ReqIFBundle = ReqIFParser.parse(path)
+        reqif_bundle = ReqIFParser.parse(filepath)
+        print(f"✅ Successfully parsed ReqIF file: {filepath}")
+        
+        requirements = {}
+        
+        if reqif_bundle.core_content and reqif_bundle.core_content.spec_objects:
+            for spec_object in reqif_bundle.core_content.spec_objects:
+                req_id = None
+                req_title = None
+                req_desc = None
+                
+                # Extract REQ-ID, REQ-TITLE, and REQ-DESC from the object's attributes
+                for attr_value in spec_object.attribute_map.values():
+                    if attr_value.definition.long_name == 'REQ-ID':
+                        req_id = attr_value.value
+                    elif attr_value.definition.long_name == 'REQ-TITLE':
+                        req_title = attr_value.value
+                    elif attr_value.definition.long_name == 'REQ-DESC':
+                        req_desc = attr_value.value
+                
+                if req_id and req_title and req_desc:
+                    requirements[req_id] = {
+                        'title': req_title,
+                        'body': req_desc
+                    }
+        
+        print(f"✅ Extracted {len(requirements)} requirements from ReqIF.")
+        return requirements
 
-    except Exception as e:
+    except ReqIFException as e:
+        # Catch and print the specific parsing error from the reqif library
         print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
         return {}
+    except Exception as e:
+        # Catch any other unexpected error
+        print(f"❌ An unexpected error occurred during ReqIF parsing: {e}")
+        return {}
 
-    results = {}
-    
-    for spec_object in reqif_bundle.spec_objects:
-        rid = spec_object.identifier
-        
-        # 1. Extract Attributes (The library handles the mapping to Long Name)
-        attrs = {}
-        for attr_long_name, attr_value in spec_object.attributes.items():
-            if attr_value is not None:
-                attrs[attr_long_name] = str(attr_value).replace('<p>', '').replace('</p>', '').strip()
-            else:
-                attrs[attr_long_name] = ""
-        
-        # 2. Determine Title and Description (Targeting the attributes from sample.reqif)
-        
-        # FIX: Directly use "Title" and "Description" which are the LONG-NAMES in sample.reqif
-        # Title is extracted from the attribute named "Title" (LONG-NAME for REQ-TITLE)
-        title = attrs.get("Title", "").strip() or rid
-        
-        # Description is extracted from the attribute named "Description" (LONG-NAME for REQ-DESC)
-        description = attrs.get("Description", "").strip()
-        
-        # Robust Fallback for Description (e.g., if using DOORS where it's "Object Text")
-        if not description:
-            desc_candidates = ["Object Text", "Text"]
-            for cand in desc_candidates:
-                if attrs.get(cand, "").strip():
-                    description = attrs[cand].strip()
-                    break
 
-        results[rid] = {
-            "identifier": rid,
-            "title": title,
-            "description": description,
-            "attrs": attrs,
-        }
-        
-    return results
+# --- GitHub API Functions ---
 
-try:
-    requirements = parse_reqif_lib(REQIF_FILE)
-except Exception as e:
-    print("❌ Failed to process ReqIF file (Fatal Error):", e)
-    sys.exit(1)
+def find_issue_by_title(title_prefix):
+    """
+    Searches for an open issue whose title starts with the given prefix (e.g., '[REQ-001]').
+    Returns the issue number or None.
+    """
+    url = f"{REPO_URL}/issues"
+    # Search for open issues and limit results
+    params = {'state': 'open', 'per_page': 30}
+    response = requests.get(url, headers=HEADERS, params=params)
 
-print(f"✅ Extracted {len(requirements)} requirements from ReqIF.")
-
-# -------------------------
-# 3) GitHub Issue sync (REST) - (Rest of the logic remains the same)
-# -------------------------
-def rest_request(method: str, endpoint: str, **kwargs) -> requests.Response:
-    url = f"https://api.github.com{endpoint}"
-    r = requests.request(method, url, headers=REST_HEADERS, **kwargs)
-    if not r.ok:
-        print(f"⚠️ REST API {method} {endpoint} -> {r.status_code}: {r.text}")
-    return r
-
-def list_all_issues() -> List[Dict[str, Any]]:
-    issues = []
-    page = 1
-    while True:
-        r = rest_request("GET", f"/repos/{REPO}/issues?state=all&per_page=100&page={page}")
-        if not r.ok: break
-        batch = [i for i in r.json() if 'pull_request' not in i]
-        if not batch: break
-        issues.extend(batch)
-        page += 1
-    return issues
-
-def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    payload = {
-        "title": f"{rid}: {info['title']}",
-        "body": info["full_issue_body"],
-        "labels": [HARDCODED_REQUIREMENT_LABEL]
-    }
-    r = rest_request("POST", f"/repos/{REPO}/issues", json=payload)
-    if r.ok: return r.json()
-    return None
-
-def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] = None):
-    payload = {
-        "title": f"{info['identifier']}: {info['title']}", 
-        "body": info["full_issue_body"],
-    }
-    if state: payload["state"] = state
-        
-    r = rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json=payload)
-    return r.ok
-
-def close_issue(issue_number: int):
-    rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json={"state": "closed"})
-
-# --- Prepare the full issue body text combining description and attributes ---
-EXCLUDED_ATTRIBUTES = ["ID", "TITLE", "DESCRIPTION", "REQ-ID", "REQ-TITLE", "REQ-DESC"]
-
-for rid, info in requirements.items():
-    attrs = info.get("attrs", {})
-    full_body = info.get("description") or ""
-
-    attr_lines = []
-    
-    for k, v in attrs.items():
-        if v is None or not v.strip(): continue
-        
-        if k.upper() in EXCLUDED_ATTRIBUTES: continue
-        if v.strip() == info["title"].strip() or v.strip() == info["description"].strip(): continue
-            
-        attr_lines.append(f"**{k}:** {v.strip()}")
-
-    if attr_lines:
-        if full_body and full_body.strip():
-            full_body += "\n\n---\n### ReqIF Attributes\n"
-        elif not full_body.strip():
-            full_body += "\n### ReqIF Attributes\n"
-            
-        full_body += "\n".join(attr_lines)
-
-    final_body_content = full_body.strip() or DEFAULT_FAILURE_BODY
-    
-    info["full_issue_body"] = final_body_content.strip() + "\n\n" + BODY_VERSION_MARKER
-# --- END: Full Issue Body ---
-
-# Fetch existing issues
-existing_issues = list_all_issues()
-existing_map_by_rid = {}
-for iss in existing_issues:
-    if ":" in iss["title"]:
-        rid_candidate = iss["title"].split(":", 1)[0]
-        existing_map_by_rid[rid_candidate] = iss
-
-# Sync issues (create / update / reopen)
-created_or_updated_issues = {}
-for rid, info in requirements.items():
-    existing = existing_map_by_rid.get(rid)
-    
-    new_issue_body = info["full_issue_body"]
-    new_title = f"{rid}: {info['title']}"
-
-    if existing:
-        existing_body = existing.get("body") or ""
-        title_changed = existing['title'] != new_title
-        existing_body_clean = existing_body.split(BODY_VERSION_MARKER)[0].strip()
-        new_issue_body_clean = new_issue_body.split(BODY_VERSION_MARKER)[0].strip()
-        
-        # FIX: Check for marker change to force update the previously failed issues
-        is_current_body_default = existing_body_clean == DEFAULT_FAILURE_BODY
-        body_changed = existing_body_clean != new_issue_body_clean or BODY_VERSION_MARKER not in existing_body
-        
-        if title_changed or body_changed or is_current_body_default:
-            state_to_set = None
-            action_verb = "Updated"
-            if existing.get("state") == "closed":
-                 state_to_set = "open"
-                 action_verb = "Reopened and Updated"
-
-            ok = update_issue(existing["number"], {"identifier": rid, "title": info["title"], "full_issue_body": info["full_issue_body"]}, state=state_to_set) 
-            
-            if ok:
-                print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']}")
-            else:
-                print(f"⚠️ Failed to update issue for {rid}")
-        else:
-            print(f"↩️ No change for issue {rid} -> #{existing['number']}")
-            
-        created_or_updated_issues[rid] = existing
+    if response.status_code == 200:
+        issues = response.json()
+        for issue in issues:
+            # Check if the title starts with the exact prefix
+            if issue['title'].startswith(title_prefix):
+                return issue['number']
+        return None
     else:
-        created = create_issue_for_req(rid, {"title": info["title"], "full_issue_body": info["full_issue_body"]})
-        if created:
-            print(f"🆕 Created issue for {rid} -> #{created['number']}")
-            created_or_updated_issues[rid] = created
+        print(f"❌ Failed to search issues. Status: {response.status_code}, Response: {response.text}")
+        return None
+
+
+def update_issue(issue_number, title, body):
+    """Updates an existing GitHub issue with new title and body."""
+    url = f"{REPO_URL}/issues/{issue_number}"
+    data = {
+        'title': title,
+        'body': body
+    }
+    
+    response = requests.patch(url, headers=HEADERS, data=json.dumps(data))
+    
+    if response.status_code == 200:
+        print(f"✅ Issue #{issue_number} updated successfully.")
+    else:
+        print(f"❌ Failed to update Issue #{issue_number}. Status: {response.status_code}, Response: {response.text}")
+
+def create_issue(title, body):
+    """Creates a new GitHub issue."""
+    url = f"{REPO_URL}/issues"
+    data = {
+        'title': title,
+        'body': body,
+    }
+    
+    response = requests.post(url, headers=HEADERS, data=json.dumps(data))
+    
+    if response.status_code == 201:
+        issue_number = response.json().get('number')
+        print(f"✨ New Issue #{issue_number} created for requirement: {title}")
+        return issue_number
+    else:
+        print(f"❌ Failed to create Issue: {title}. Status: {response.status_code}, Response: {response.text}")
+        return None
+
+
+# --- Main Logic ---
+
+def main():
+    print(f"Starting ReqIF synchronization for repository: {GITHUB_REPOSITORY}")
+
+    # 1. Check for the ReqIF file
+    reqif_files = glob.glob(REQIF_FILE_PATH)
+    if not reqif_files:
+        print(f"Error: No ReqIF file found at {REQIF_FILE_PATH}")
+        return
+    
+    print(f"📄 Found ReqIF file: {reqif_files[0]}")
+    
+    # 2. Parse the ReqIF file
+    extracted_reqs = parse_reqif_file(reqif_files[0])
+
+    if not extracted_reqs:
+        print("🛑 No requirements extracted or parsing failed. Exiting synchronization.")
+        return
+
+    # 3. Iterate over ALL extracted requirements and sync with GitHub Issues
+    print(f"\n--- Starting synchronization of {len(extracted_reqs)} requirements ---")
+    
+    for req_id, req_data in extracted_reqs.items():
+        # The prefix is used to uniquely identify this requirement's issue
+        issue_title_prefix = f"[{req_id}]"
+        full_issue_title = f"{issue_title_prefix} {req_data['title']}"
+        
+        # 3a. Try to find an existing issue
+        existing_issue_number = find_issue_by_title(issue_title_prefix)
+
+        if existing_issue_number:
+            # 3b. If found, update the issue
+            update_issue(existing_issue_number, 
+                         full_issue_title, 
+                         req_data['body'])
         else:
-            print(f"⚠️ Failed to create issue for {rid}")
+            # 3c. If not found, create a new issue
+            create_issue(full_issue_title, 
+                         req_data['body'])
 
-# Close deleted issues (omitted for brevity)
 
-# -------------------------
-# 4) Projects V2 & Field mapping (GraphQL) - (Omitted for brevity, assumed unchanged)
-# -------------------------
-print("✅ Completed ReqIF → GitHub synchronization (issues + project fields).")
+    print(f"\n✅ Completed ReqIF → GitHub synchronization (issues).")
+
+
+if __name__ == "__main__":
+    main()
 
 
 
