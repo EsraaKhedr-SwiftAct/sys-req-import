@@ -5,29 +5,31 @@ on:
   push:
     paths:
       - '**/*.reqif'
-      - '**/*.reqifz'
-      - 'import_reqif_dynamic.py'
+      - '.github/scripts/import_reqif_dynamic.py'
 
 jobs:
   import-reqif:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
     steps:
-      - name: 🧰 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.x'
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
-          pip install strictdoc lxml requests
+          pip install requests
 
-      - name: 🚀 Run ReqIF Importer
+      - name: Run ReqIF Import Script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PROJECT_NAME: Test Project
         run: |
-          python import_reqif_dynamic.py
+          python .github/scripts/import_reqif_dynamic.py
