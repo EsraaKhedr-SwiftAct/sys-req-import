@@ -5,7 +5,9 @@ import requests
 import json
 import glob
 from reqif.parser import ReqIFParser
-from reqif.exceptions import ReqIFException
+# NOTE: The explicit import of ReqIFException was removed to fix the ModuleNotFoundError.
+# We now catch the general Python Exception in the parsing function to ensure the script
+# runs and prints the specific underlying error message from the ReqIF library.
 
 # --- Configuration and Constants ---
 REQIF_FILE_PATH = 'sample.reqif'
@@ -31,7 +33,7 @@ def parse_reqif_file(filepath):
     """
     Parses the ReqIF file. Returns a dictionary of requirements, 
     keyed by REQ-ID, or an empty dictionary on failure.
-    Includes robust error handling for debugging parsing issues.
+    Uses generic Exception catching to bypass the previous import error.
     """
     try:
         reqif_bundle = ReqIFParser.parse(filepath)
@@ -63,13 +65,9 @@ def parse_reqif_file(filepath):
         print(f"✅ Extracted {len(requirements)} requirements from ReqIF.")
         return requirements
 
-    except ReqIFException as e:
-        # Catch and print the specific parsing error from the reqif library
-        print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
-        return {}
     except Exception as e:
-        # Catch any other unexpected error
-        print(f"❌ An unexpected error occurred during ReqIF parsing: {e}")
+        # Catch any error, which should now include the specific ReqIF/XML parsing error
+        print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
         return {}
 
 
