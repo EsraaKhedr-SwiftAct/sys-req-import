@@ -82,15 +82,10 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'desc': ... } }
     """
     try:
-        # FIX: Read the file content as bytes ('rb' mode) and wrap it in BytesIO.
-        # This prevents the parser from attempting to treat the content string as a file path.
-        with open(path, 'rb') as f:
-            content_bytes = f.read()
-        
-        # Wrap the bytes content in a stream object
-        content_stream = io.BytesIO(content_bytes)
-            
-        reqif_bundle = ReqIFParser.parse(content_stream) 
+        # FIX: Pass the file path (str) directly. 
+        # The library is designed to open and parse the file itself when given a path string.
+        # This bypasses the in-memory content confusion (bytes/BytesIO).
+        reqif_bundle = ReqIFParser.parse(path) 
         
     except ReqIFParserException as e:
         # Catch library-specific parsing errors
@@ -142,11 +137,10 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                 del attrs[cand]
                 break
         
-        # Ensure ID/Identifier is not repeated in attrs
+        # Clean up attributes that were used as ID/Title/Description in the sample
         if "ID" in attrs: del attrs["ID"]
         if "Identifier" in attrs: del attrs["Identifier"]
-        # Also remove the specific attributes used for Title/Description if they were found but not deleted earlier
-        if "Requirement ID" in attrs: del attrs["Requirement ID"] # added based on XML sample
+        if "Requirement ID" in attrs: del attrs["Requirement ID"] 
         if "Requirement Text" in attrs and "Requirement Text" not in title_candidates: del attrs["Requirement Text"]
 
         
