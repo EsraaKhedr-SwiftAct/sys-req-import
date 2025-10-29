@@ -1,35 +1,46 @@
-name: Import ReqIF to GitHub
+nname: Import ReqIF to GitHub
 
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - '**/*.reqif'
-      - '.github/scripts/import_reqif_dynamic.py'
+
+Allows you to run this workflow manually from the Actions tab
+
+workflow_dispatch:
+
+Triggers the workflow on push events for ReqIF files or the import script
+
+push:
+paths:
+- '**/*.reqif'
+- '.github/scripts/import_reqif_dynamic.py'
 
 jobs:
-  import-reqif:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
+import-reqif:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+# Required permissions for creating/updating issues and reading the repository content
+permissions:
+  contents: read
+  issues: write
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          pip install requests
+  - name: Set up Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: '3.x'
 
-      - name: Run ReqIF Import Script
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          python .github/scripts/import_reqif_dynamic.py
+  # FIX: Combining installation and script execution into one 'run' step 
+  # to ensure the 'reqif' library is immediately available for the script.
+  - name: Install dependencies and Run ReqIF Import Script 🚀
+    env:
+      # Pass required secrets and context to the Python script
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    run: |
+      # 1. Install both required dependencies: requests for API calls and reqif for parsing
+      pip install requests reqif
+      
+      # 2. Execute the script within the same environment
+      python .github/scripts/import_reqif_dynamic.py
