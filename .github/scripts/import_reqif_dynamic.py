@@ -14,7 +14,8 @@ import glob
 import json
 import requests
 import io 
-import traceback # NEW: Import for detailed error logging
+import traceback 
+from lxml import etree # NEW: Import lxml for XML manipulation
 
 # NEW: Import the ReqIF library
 from reqif.parser import ReqIFParser
@@ -79,13 +80,39 @@ print(f"📄 Parsing ReqIF: {REQIF_FILE} using reqif library.")
 # -------------------------
 def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     """
-    Parses a ReqIF file using the 'reqif' library by passing the file path (standard approach).
-    Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'desc': ... } }
+    Parses a ReqIF file by removing the unimplemented <THE-HEADER> tag 
+    and passing the modified content string to ReqIFParser.
     """
     try:
-        # FIX: Pass the file path (str) directly. This is the correct, standard usage 
-        # and avoids the issues encountered with manual content or stream passing.
-        reqif_bundle = ReqIFParser.parse(path) 
+        # 1. Read file content as string
+        with open(path, 'r', encoding='utf-8') as f:
+            content_string = f.read()
+
+        # 2. Use lxml to parse and remove the problematic tag
+        # The ReqIF namespace is required for lxml to find the tags correctly.
+        NAMESPACE = "http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
+        NS_MAP = {'r': NAMESPACE} # Use 'r' as a prefix for XPath
+
+        print(f"📄 Cleaning XML content: Attempting to remove the unimplemented <THE-HEADER> tag.")
+        # etree.fromstring requires bytes input
+        xml_root = etree.fromstring(content_string.encode('utf-8')) 
+        
+        # Find the <THE-HEADER> element using XPath
+        header_element = xml_root.find('r:THE-HEADER', namespaces=NS_MAP)
+        
+        if header_element is not None:
+            # Remove the header element from its parent (<REQ-IF>)
+            xml_root.remove(header_element)
+            print("✅ <THE-HEADER> successfully removed from XML content.")
+        else:
+            print("⚠️ <THE-HEADER> not found in XML. Parsing original content.")
+
+        # 3. Serialize the modified tree back to a string
+        # This string will be the XML starting with <REQ-IF> but missing <THE-HEADER>
+        modified_content_string = etree.tostring(xml_root, encoding='utf-8', xml_declaration=True).decode('utf-8')
+        
+        # 4. Pass the modified string to the ReqIFParser
+        reqif_bundle = ReqIFParser.parse_from_string(modified_content_string) 
         
     except ReqIFParserException as e:
         # Catch library-specific parsing errors and ensure verbose output
