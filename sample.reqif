@@ -25,7 +25,6 @@
         </DATATYPE-DEFINITION-ENUMERATION>
         <DATATYPE-DEFINITION-XHTML IDENTIFIER="DT_XHTML" LONG-NAME="Rich Text"/>
       </DATATYPES>
-      
       <SPEC-TYPES>
         <SPEC-OBJECT-TYPE IDENTIFIER="RequirementType" LONG-NAME="System Requirement">
           <SPEC-ATTRIBUTES>
