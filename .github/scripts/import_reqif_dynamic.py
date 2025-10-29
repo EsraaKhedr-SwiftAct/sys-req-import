@@ -84,16 +84,19 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     # Use the official namespace for robust finding
     REQIF_NS = "{http://www.omg.org/spec/ReqIF/20110401/reqif.xsd}"
 
+    # --- FIX 1: Robustly find all attribute definitions across types ---
     for ad in root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-STRING") + \
               root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-INTEGER") + \
               root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-REAL") + \
               root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-ENUMERATION") + \
               root.findall(".//ATTRIBUTE-DEFINITION-STRING"): # Fallback non-namespaced
         
+        # Check IDENTIFIER and LONG-NAME attributes, as well as child element for LONG-NAME
         ident = ad.attrib.get("IDENTIFIER") or ad.attrib.get("identifier")
         long_name = ad.attrib.get("LONG-NAME") or ad.attrib.get("long-name") or ad.findtext(f"{REQIF_NS}LONG-NAME") or ad.findtext("LONG-NAME") or ident
         if ident:
             attr_def_map[ident] = long_name
+    # --- END FIX 1 ---
 
     # now iterate SPEC-OBJECTS
     results = {}
@@ -131,7 +134,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                     friendly = attr_def_map.get(def_ref, def_ref)
                     attrs[friendly] = value_text
 
-        # Map to common titles/descriptions
+        # Map to common titles/descriptions from the *attributes* we just parsed
         title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text"]
         desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content"]
         
@@ -175,7 +178,8 @@ def rest_request(method: str, endpoint: str, **kwargs) -> requests.Response:
     url = f"https://api.github.com{endpoint}"
     r = requests.request(method, url, headers=REST_HEADERS, **kwargs)
     if not r.ok:
-        print(f"⚠️ REST API {method} {endpoint} -> {r.status_code}: {r.text}")
+        # print(f"⚠️ REST API {method} {endpoint} -> {r.status_code}: {r.text}") # suppressed to avoid excessive output
+        pass 
     return r
 
 def list_all_issues() -> List[Dict[str, Any]]:
@@ -204,7 +208,6 @@ def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, A
         return r.json()
     return None
 
-# --- START FIX: Update function to support reopening ---
 def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] = None):
     """
     Updates the issue content and optionally its state (e.g., to 'open').
@@ -219,12 +222,11 @@ def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] =
          
     r = rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json=payload)
     return r.ok
-# --- END FIX: Update function to support reopening ---
 
 def close_issue(issue_number: int):
     rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json={"state": "closed"})
 
-# --- START FIX: Prepare the full issue body text combining description and attributes ---
+# --- FIX 2: Prepare the full issue body text combining description and attributes ---
 title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text"]
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content"]
 
@@ -253,16 +255,16 @@ for rid, info in requirements.items():
     # 3. Combine description and attributes
     if attr_lines:
         # If there is a main description, separate it from the attributes with a divider
-        if full_body:
+        if full_body and full_body.strip():
             full_body += "\n\n---\n### ReqIF Attributes\n"
-        else:
+        elif not full_body or not full_body.strip():
             full_body = "### ReqIF Attributes\n" # Start with attributes if no main description
             
         full_body += "\n".join(attr_lines)
 
     # Store the complete, single body string
     info["full_issue_body"] = full_body or "No description provided."
-# --- END FIX: Full Issue Body ---
+# --- END FIX 2: Full Issue Body ---
 
 
 # Fetch existing issues
@@ -287,13 +289,11 @@ for rid, info in requirements.items():
         # Check if an update is needed (title or body changed)
         if existing_body.strip() != new_issue_body.strip() or existing['title'] != new_title:
             
-            # --- START FIX FOR REOPENING CLOSED ISSUES ---
             state_to_set = None
             action_verb = "Updated"
             if existing.get("state") == "closed":
                  state_to_set = "open"
                  action_verb = "Reopened and Updated"
-            # --- END FIX FOR REOPENING CLOSED ISSUES ---
 
             # Update the issue, explicitly setting state to 'open' if it was closed.
             ok = update_issue(existing["number"], info, state=state_to_set) 
@@ -363,7 +363,6 @@ query($owner:String!, $name:String!) {
 """
 owner, repo_name = REPO.split("/")
 # Update: Fix the GraphQL query to use inline fragments for Union type `ProjectV2FieldConfiguration`
-# Note: The original script failed here. The new query above addresses the reported GraphQL errors.
 try:
     projects_resp = run_graphql(query_projects, {"owner": owner, "name": repo_name})
 except Exception as e:
