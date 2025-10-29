@@ -82,12 +82,15 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'desc': ... } }
     """
     try:
-        # FIX: Read the file content as bytes ('rb' mode).
-        # The parser requires 'bytes' when content is not passed as a file path string.
+        # FIX: Read the file content as bytes ('rb' mode) and wrap it in BytesIO.
+        # This prevents the parser from attempting to treat the content string as a file path.
         with open(path, 'rb') as f:
             content_bytes = f.read()
+        
+        # Wrap the bytes content in a stream object
+        content_stream = io.BytesIO(content_bytes)
             
-        reqif_bundle = ReqIFParser.parse(content_bytes) 
+        reqif_bundle = ReqIFParser.parse(content_stream) 
         
     except ReqIFParserException as e:
         # Catch library-specific parsing errors
@@ -117,7 +120,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
             attrs[long_name] = str(value)
 
         # Map special attributes to 'title' and 'description' keys
-        title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description"]
+        title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text"]
         desc_candidates = ["Description", "Desc", "REQ-DESC", "Content"]
         
         # Find Title
@@ -142,6 +145,10 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
         # Ensure ID/Identifier is not repeated in attrs
         if "ID" in attrs: del attrs["ID"]
         if "Identifier" in attrs: del attrs["Identifier"]
+        # Also remove the specific attributes used for Title/Description if they were found but not deleted earlier
+        if "Requirement ID" in attrs: del attrs["Requirement ID"] # added based on XML sample
+        if "Requirement Text" in attrs and "Requirement Text" not in title_candidates: del attrs["Requirement Text"]
+
         
         results[rid] = {
             "identifier": rid,
