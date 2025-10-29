@@ -58,89 +58,103 @@ print(f"📄 Found ReqIF file: {REQIF_FILE}")
 print(f"📄 Parsing ReqIF: {REQIF_FILE}")
 
 # -------------------------
-# 2) ReqIF XML parsing (FINAL ROBUST VERSION)
+# 2) ReqIF XML parsing (General & Robust Two-Pass Logic)
 # -------------------------
 def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     """
     Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'description': ... } }
-    Uses XML parsing with explicit namespace fallback for maximum compatibility.
+    Implements a general two-pass XML parser for ReqIF:
+    Pass 1: Map standard attribute IDs (REF) to human-readable names (LONG-NAME).
+    Pass 2: Extract values using the ID map and include a fallback for non-standard definitions (like those using text content).
     """
-    # Register default namespace for robust parsing using standard ReqIF namespace
+    # Define the official ReqIF Namespace for robust lookups
     REQIF_NS = "{http://www.omg.org/spec/ReqIF/20110401/reqif.xsd}"
     
     try:
         tree = ET.parse(path)
         root = tree.getroot()
     except ET.ParseError as e:
-        # For a compressed ReqIFZ, ET.parse won't work, but this file is .reqif
         print(f"❌ Failed to parse XML file: {e}")
         return {}
 
-
-    # 1. Build map of ATTRIBUTE-DEFINITION IDENTIFIER -> LONG-NAME
+    # --- Pass 1: Build map of ATTRIBUTE-DEFINITION IDENTIFIER -> LONG-NAME ---
+    # This is necessary for general ReqIF files that use cryptic IDs (e.g., 'DT_123') in the SPEC-OBJECT.
     attr_def_map = {}  # IDENTIFIER -> LONG-NAME
     
-    # Use XPath to find all definition types, ignoring namespaces for robustness (././ is necessary to find nested)
+    # Target all possible attribute definition types using a wildcard or a union of known types
+    # For robustness, we search under the SPEC-TYPES and include a namespaceless fallback
+    
+    # 1. Namespaced Search for all Attribute Definitions
     attr_defs = root.findall(".//" + f"{REQIF_NS}ATTRIBUTE-DEFINITION-STRING")
-    attr_defs += root.findall(".//" + "ATTRIBUTE-DEFINITION-STRING") # Fallback non-namespaced
+    attr_defs += root.findall(".//" + f"{REQIF_NS}ATTRIBUTE-DEFINITION-INTEGER")
+    attr_defs += root.findall(".//" + f"{REQIF_NS}ATTRIBUTE-DEFINITION-REAL")
+    attr_defs += root.findall(".//" + f"{REQIF_NS}ATTRIBUTE-DEFINITION-ENUMERATION")
+    
+    # 2. Non-namespaced Search (Fallback for poorly formed ReqIF files)
+    attr_defs += root.findall(".//ATTRIBUTE-DEFINITION-STRING")
     
     for ad in attr_defs:
         ident = ad.attrib.get("IDENTIFIER") or ad.attrib.get("identifier")
+        
+        # Prefer LONG-NAME from attribute, then child element text, then fallback to IDENTIFIER
         long_name = ad.attrib.get("LONG-NAME") or ad.attrib.get("long-name")
-        
-        # If no LONG-NAME attribute, try child element text
         if not long_name:
-             long_name = ad.findtext(f"{REQIF_NS}LONG-NAME")
-        if not long_name:
-             long_name = ad.findtext("LONG-NAME") # Fallback non-namespaced
+             long_name = ad.findtext(f"{REQIF_NS}LONG-NAME") or ad.findtext("LONG-NAME")
         
-        # Use IDENTIFIER as fallback for LONG-NAME
+        # Use IDENTIFIER as fallback for LONG-NAME if nothing is found
         long_name = long_name or ident 
 
         if ident:
             attr_def_map[ident] = long_name
-
-    # 2. Iterate SPEC-OBJECTS
+            # Also store the long name itself as a key, for cases where it's used directly (user's file)
+            attr_def_map[long_name] = long_name
+            
+    # --- Pass 2: Iterate SPEC-OBJECTS and extract attributes ---
     results = {}
+    
+    # Search for SPEC-OBJECTs (Namespaced + Fallback)
     spec_objects = root.findall(".//" + f"{REQIF_NS}SPEC-OBJECT")
-    spec_objects += root.findall(".//" + "SPEC-OBJECT") # Fallback non-namespaced
+    spec_objects += root.findall(".//" + "SPEC-OBJECT") 
 
     for so in spec_objects:
-        # Get requirement identifier (RID)
+        # Get requirement identifier (RID) from attribute
         rid = so.attrib.get("IDENTIFIER") or so.attrib.get("identifier") or "REQ-UNKNOWN"
         # Get long name/title candidate from SPEC-OBJECT attribute
         long_name_attr = so.attrib.get("LONG-NAME") or so.attrib.get("long-name")
 
         attrs = {}
         
-        # Find VALUES node (Crucial fix is here to ensure one is found reliably)
+        # Find VALUES node (Namespaced + Fallback)
         values_node = so.find(f"{REQIF_NS}VALUES")
         if values_node is None:
             values_node = so.find("VALUES")
         
         if values_node is not None:
+            # Iterate through attribute value elements (ATTRIBUTE-VALUE-STRING, etc.)
             for av in list(values_node):
-                # 1. Find the DEFINITION tag to get the attribute ID
+                
+                # 1. Find the DEFINITION tag
                 defnode = av.find(f"{REQIF_NS}DEFINITION")
                 if defnode is None:
                     defnode = av.find("DEFINITION")
                 
                 def_ref = None
-                if defnode is not None and defnode.text and defnode.text.strip():
-                    # Your file uses the text content as the ID
-                    def_ref = defnode.text.strip()
-                elif defnode is not None and defnode.attrib.get("REF"):
-                    # Standard ReqIF uses the REF attribute
+                
+                # --- General Parsing: Check for standard 'REF' attribute first ---
+                if defnode is not None and defnode.attrib.get("REF"):
                     def_ref = defnode.attrib.get("REF")
-
-                # 2. Extract the value from THE-VALUE attribute (Your file's style)
-                value_text = av.attrib.get("THE-VALUE") 
                 
-                # 3. Fallback for other common attribute styles
+                # --- Fallback for your file: Check for text content as the identifier ---
+                elif defnode is not None and defnode.text and defnode.text.strip():
+                    def_ref = defnode.text.strip() # This handles REQ-ID, REQ-DESC, etc.
+                
+                
+                # 2. Extract the value (General: look for THE-VALUE attribute or child text)
+                value_text = av.attrib.get("THE-VALUE") # Common attribute storage
                 if value_text is None:
-                    value_text = av.attrib.get("VALUE")
+                    value_text = av.attrib.get("VALUE") # Alternative attribute storage
                 
-                # 4. Fallback for child element text (e.g., Xhtml/rich text)
+                # Fallback for child element (e.g., Xhtml/rich text or simple value tag)
                 if value_text is None:
                     valnode = av.find(f"{REQIF_NS}THE-VALUE")
                     if valnode is None:
@@ -150,6 +164,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                         value_text = valnode.text.strip()
 
                 if def_ref and value_text is not None and value_text:
+                    # Map the found reference (ID or text) to the friendly long name
                     friendly = attr_def_map.get(def_ref, def_ref)
                     attrs[friendly] = value_text.strip()
 
@@ -157,7 +172,6 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
         title_candidates = ["Title", "Name", "REQ-TITLE"]
         desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text"]
         
-        # Start with long_name_attr as the default title
         title = long_name_attr or rid 
         for cand in title_candidates:
             if cand in attrs and attrs[cand].strip():
@@ -165,7 +179,6 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                 break
 
         description = ""
-        # IMPORTANT: Iterate through candidates and set the description using the first one found
         for cand in desc_candidates:
             if cand in attrs and attrs[cand].strip():
                 description = attrs[cand].strip()
@@ -199,16 +212,14 @@ def rest_request(method: str, endpoint: str, **kwargs) -> requests.Response:
     url = f"https://api.github.com{endpoint}"
     r = requests.request(method, url, headers=REST_HEADERS, **kwargs)
     if not r.ok:
-        # print(f"⚠️ REST API {method} {endpoint} -> {r.status_code}: {r.text}") # suppressed to avoid excessive output
-        pass
+        print(f"⚠️ REST API {method} {endpoint} -> {r.status_code}: {r.text}")
     return r
 
 def list_all_issues() -> List[Dict[str, Any]]:
     issues = []
     page = 1
-    # Fetch ALL issues to find closed ones that need reopening/updating
     while True:
-        r = rest_request("GET", f"/repos/{REPO}/issues?state=all&per_page=100&page={page}&sort=updated")
+        r = rest_request("GET", f"/repos/{REPO}/issues?state=all&per_page=100&page={page}")
         if not r.ok:
             break
         batch = r.json()
@@ -218,10 +229,19 @@ def list_all_issues() -> List[Dict[str, Any]]:
         page += 1
     return issues
 
+def find_issue_by_rid(issues, rid):
+    # We store issue title as "RID: Title" to keep mapping stable
+    prefix = f"{rid}:"
+    for i in issues:
+        if i["title"].startswith(prefix):
+            return i
+    return None
+
 def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     payload = {
         "title": f"{rid}: {info['title']}",
         "body": info["full_issue_body"],
+        # don't set labels here (we map requirement label via Project field; but we add the hard-coded label for visibility)
         "labels": [HARDCODED_REQUIREMENT_LABEL]
     }
     r = rest_request("POST", f"/repos/{REPO}/issues", json=payload)
@@ -230,9 +250,6 @@ def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, A
     return None
 
 def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] = None):
-    """
-    Updates the issue content and optionally its state (e.g., to 'open').
-    """
     payload = {
         "title": f"{info['identifier']}: {info['title']}", 
         "body": info["full_issue_body"],
@@ -249,8 +266,8 @@ def close_issue(issue_number: int):
 # --- Prepare the full issue body text combining description and attributes ---
 title_candidates = ["Title", "Name", "REQ-TITLE"]
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text"]
-DEFAULT_FAILURE_BODY = "No description provided." # Key message to check for force-update
-# V1.2.5: New marker for final robust parser fix (force update)
+DEFAULT_FAILURE_BODY = "No description provided."
+# V1.3.0: New marker for final robust parser fix
 BODY_VERSION_MARKER = ""
 
 for rid, info in requirements.items():
@@ -274,7 +291,7 @@ for rid, info in requirements.items():
             continue
             
         # Skip ID which is already in the issue title
-        if k.lower() == 'id' or k.lower() == 'req-id':
+        if k.lower() == 'id' or k.lower() == 'req-id' or k == info["identifier"]:
             continue
 
         attr_lines.append(f"**{k}:** {v.strip()}")
@@ -320,16 +337,11 @@ for rid, info in requirements.items():
         title_changed = existing['title'] != new_title
         
         # Check if the body changed (using the new, unique marker will force this to be true)
-        # We need to compare the cleaned version to handle markdown differences, but rely on marker for initial force
         existing_body_clean = existing_body.replace(BODY_VERSION_MARKER, "").strip()
         new_issue_body_clean = new_issue_body.replace(BODY_VERSION_MARKER, "").strip()
         body_changed = existing_body_clean != new_issue_body_clean
         
-        # Force update if the old marker (or any prior marker) is missing, and the new body is not the default failure body.
-        # This handles the case where the previous run failed to update the content, and forces the new content.
-        force_update = BODY_VERSION_MARKER not in existing_body and new_issue_body_clean != DEFAULT_FAILURE_BODY
-
-        if title_changed or body_changed or force_update:
+        if title_changed or body_changed:
             
             state_to_set = None
             action_verb = "Updated"
@@ -341,8 +353,7 @@ for rid, info in requirements.items():
             ok = update_issue(existing["number"], {"identifier": rid, "title": info["title"], "full_issue_body": info["full_issue_body"]}, state=state_to_set) 
             
             if ok:
-                # The log should now show this message
-                print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']} (FORCE APPLIED)")
+                print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']}")
             else:
                 print(f"⚠️ Failed to update issue for {rid}")
         else:
@@ -370,10 +381,6 @@ for rid in to_close:
 # -------------------------
 # 4) Projects V2 & Field mapping (GraphQL)
 # -------------------------
-# (GraphQL logic is unchanged from previous working versions, omitted for brevity)
-# (It will execute if your project is configured)
-# ... [Unchanged GraphQL logic to follow] ...
-
 def run_graphql(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     payload = {"query": query}
     if variables:
@@ -486,8 +493,8 @@ else:
       }
     }
     """
-    # mutation to update field
-    mutation_update_field = """
+    # mutation to update field (text value)
+    mutation_update_field_text = """
     mutation($project:ID!, $item:ID!, $field:ID!, $value: String!) {
       updateProjectV2ItemFieldValue(input:{
         projectId: $project,
@@ -528,26 +535,11 @@ else:
             return item_id
         return None
 
-    # mutation to update field (text value)
-    mutation_update_field_text = """
-    mutation($project:ID!, $item:ID!, $field:ID!, $value: String!) {
-      updateProjectV2ItemFieldValue(input:{
-        projectId: $project,
-        itemId: $item,
-        fieldId: $field,
-        value: { text: $value }
-      }) {
-        projectV2Item { id }
-      }
-    }
-    """
-    
     # update field helper
     def update_project_field(item_id: str, field_obj: Dict[str, Any], value: str):
         if not item_id or not field_obj or value is None:
             return
         
-        # We assume the fields we are setting (ReqID, Priority, Label) are text-based for now.
         vars = {"project": project_id, "item": item_id, "field": field_obj["id"], "value": value}
         run_graphql(mutation_update_field_text, vars)
 
