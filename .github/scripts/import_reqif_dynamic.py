@@ -59,21 +59,27 @@ print(f"📄 Parsing ReqIF: {REQIF_FILE}")
 
 # -------------------------
 # 2) ReqIF XML parsing (robust)
+#    - builds a list of spec objects and attributes
 # -------------------------
 def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     """
-    Parses a ReqIF file using XML parsing with namespace handling.
+    Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'description': ... } }
+    Uses XML parsing with namespace handling and supports common ReqIF structure.
     """
     ns = {}
     tree = ET.parse(path)
     root = tree.getroot()
 
+    # collect namespaces from the root element (common pattern)
     for k, v in root.attrib.items():
         if k.startswith("xmlns"):
-            nsname = k.split(":", 1)[1] if ":" in k else ""
+            if ":" in k:
+                nsname = k.split(":", 1)[1]
+            else:
+                nsname = ""
             ns[nsname] = v
 
-    # Build map of ATTRIBUTE-DEFINITION IDENTIFIER -> LONG-NAME
+    # Build map of ATTRIBUTE-DEFINITION IDENTIFIER -> LONG-NAME (so DEFINITION REF maps to friendly name)
     attr_def_map = {}  # IDENTIFIER -> LONG-NAME
     # Use the official namespace for robust finding
     REQIF_NS = "{http://www.omg.org/spec/ReqIF/20110401/reqif.xsd}"
@@ -81,10 +87,11 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     for ad in root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-STRING") + \
               root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-INTEGER") + \
               root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-REAL") + \
-              root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-ENUMERATION"):
+              root.findall(f".//{REQIF_NS}ATTRIBUTE-DEFINITION-ENUMERATION") + \
+              root.findall(".//ATTRIBUTE-DEFINITION-STRING"): # Fallback non-namespaced
         
         ident = ad.attrib.get("IDENTIFIER") or ad.attrib.get("identifier")
-        long_name = ad.attrib.get("LONG-NAME") or ad.attrib.get("long-name") or ad.findtext(f"{REQIF_NS}LONG-NAME") or ident
+        long_name = ad.attrib.get("LONG-NAME") or ad.attrib.get("long-name") or ad.findtext(f"{REQIF_NS}LONG-NAME") or ad.findtext("LONG-NAME") or ident
         if ident:
             attr_def_map[ident] = long_name
 
@@ -95,7 +102,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
         spec_objects = root.findall(".//SPEC-OBJECT")  # fallback
 
     for so in spec_objects:
-        rid = so.attrib.get("IDENTIFIER") or so.attrib.get("identifier") or "REQ-UNKNOWN"
+        rid = so.attrib.get("IDENTIFIER") or so.attrib.get("identifier") or so.findtext(f"{REQIF_NS}IDENTIFIER") or so.findtext("IDENTIFIER") or "REQ-UNKNOWN"
         long_name = so.attrib.get("LONG-NAME") or so.attrib.get("long-name") or so.findtext(f"{REQIF_NS}LONG-NAME") or so.findtext("LONG-NAME") or rid
 
         attrs = {}
@@ -197,47 +204,47 @@ def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, A
         return r.json()
     return None
 
-def update_issue(issue_number: int, info: Dict[str, Any], state: str):
+# --- START FIX: Update function to support reopening ---
+def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] = None):
     """
-    Updates the issue content and optionally its state.
+    Updates the issue content and optionally its state (e.g., to 'open').
     """
     payload = {
         "title": f"{info['identifier']}: {info['title']}", 
         "body": info["full_issue_body"],
     }
-    # Explicitly set the state if required (e.g., reopening)
+    # Explicitly set the state if provided (e.g., reopening)
     if state:
          payload["state"] = state
          
     r = rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json=payload)
     return r.ok
+# --- END FIX: Update function to support reopening ---
 
 def close_issue(issue_number: int):
     rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json={"state": "closed"})
 
-# --- START FIX FOR COMPLETE DESCRIPTION ---
-# Prepare the full issue body text combining description and attributes
+# --- START FIX: Prepare the full issue body text combining description and attributes ---
+title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text"]
+desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content"]
+
 for rid, info in requirements.items():
     attrs = info.get("attrs", {})
     
-    # 1. Start with the main description (from a mapped field like "Object Text")
+    # 1. Start with the main description (from a mapped field)
     full_body = info.get("description") or ""
 
     attr_lines = []
-    
-    # Identify which attribute keys were used for the main title/description
-    title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text"]
-    desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content"]
     
     # 2. Build the formatted attribute list, skipping attributes already used for the main description/title
     for k, v in attrs.items():
         if v is None: continue
         
-        # Skip if the key was used for the main title
+        # Skip if the attribute value was used for the main title (to avoid duplication)
         if k in title_candidates and v.strip() == info["title"].strip() and info["title"].strip():
             continue
             
-        # Skip if the key was used for the main description (and the description is non-empty)
+        # Skip if the attribute value was used for the main description (to avoid duplication)
         if k in desc_candidates and v.strip() == info["description"].strip() and info["description"].strip():
             continue
             
@@ -253,8 +260,9 @@ for rid, info in requirements.items():
             
         full_body += "\n".join(attr_lines)
 
+    # Store the complete, single body string
     info["full_issue_body"] = full_body or "No description provided."
-# --- END FIX FOR COMPLETE DESCRIPTION ---
+# --- END FIX: Full Issue Body ---
 
 
 # Fetch existing issues
@@ -299,6 +307,7 @@ for rid, info in requirements.items():
             
         created_or_updated_issues[rid] = existing
     else:
+        # Issue doesn't exist, create it (uses the new full_issue_body)
         created = create_issue_for_req(rid, info)
         if created:
             print(f"🆕 Created issue for {rid} -> #{created['number']}")
@@ -318,8 +327,6 @@ for rid in to_close:
 # -------------------------
 # 4) Projects V2 & Field mapping (GraphQL)
 # -------------------------
-# ... (rest of the script for GraphQL is unchanged)
-
 def run_graphql(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     payload = {"query": query}
     if variables:
@@ -329,9 +336,11 @@ def run_graphql(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
         raise Exception(f"GraphQL error {r.status_code}: {r.text}")
     data = r.json()
     if "errors" in data:
+        # print and continue where possible
         print("⚠️ GraphQL returned errors:", data["errors"])
     return data
 
+# 4.1 get repository projects v2 and their fields
 query_projects = """
 query($owner:String!, $name:String!) {
   repository(owner:$owner, name:$name) {
@@ -341,9 +350,10 @@ query($owner:String!, $name:String!) {
         title
         fields(first:100) {
           nodes {
-            id
-            name
-            dataType
+            # ProjectV2FieldConfiguration is a Union type, we need inline fragments
+            ... on ProjectV2Field { id name dataType }
+            ... on ProjectV2IterationField { id name dataType }
+            ... on ProjectV2SingleSelectField { id name dataType }
           }
         }
       }
@@ -352,12 +362,20 @@ query($owner:String!, $name:String!) {
 }
 """
 owner, repo_name = REPO.split("/")
-projects_resp = run_graphql(query_projects, {"owner": owner, "name": repo_name})
+# Update: Fix the GraphQL query to use inline fragments for Union type `ProjectV2FieldConfiguration`
+# Note: The original script failed here. The new query above addresses the reported GraphQL errors.
+try:
+    projects_resp = run_graphql(query_projects, {"owner": owner, "name": repo_name})
+except Exception as e:
+    print(f"⚠️ Failed to fetch Projects V2 (GraphQL error): {e}")
+    projects_resp = {"data": {"repository": {"projectsV2": {"nodes": []}}}}
+
 
 project_nodes = projects_resp.get("data", {}).get("repository", {}).get("projectsV2", {}).get("nodes", []) or []
 if not project_nodes:
     print("⚠️ No Projects V2 found in repository — skipping project field mapping.")
 else:
+    # choose project
     project = None
     if PROJECT_NAME:
         for p in project_nodes:
@@ -369,8 +387,10 @@ else:
     project_id = project["id"]
     print(f"📋 Using Project: {project.get('title')} ({project_id})")
 
+    # build field map by normalized name
     fields = project.get("fields", {}).get("nodes", []) or []
     field_map = {f["name"].strip().lower(): f for f in fields if f.get("name")}
+    # candidate field names we want to map to
     FIELD_NAME_SYSTEM_REQ_ID = "system requirement id"
     FIELD_NAME_PRIORITY = "priority"
     FIELD_NAME_LABEL = "requirement label"
@@ -379,6 +399,7 @@ else:
     priority_field = field_map.get(FIELD_NAME_PRIORITY.lower())
     label_field = field_map.get(FIELD_NAME_LABEL.lower())
 
+    # GraphQL helpers: find project item for issue (by issue number) or create one
     query_project_items = """
     query($projectId: ID!, $perPage:Int!) {
       node(id:$projectId) {
@@ -389,7 +410,7 @@ else:
               content {
                 ... on Issue {
                   number
-                  id 
+                  id # Include ID to map issue number to node ID
                 }
               }
             }
@@ -402,13 +423,15 @@ else:
     item_nodes = items_resp.get("data", {}).get("node", {}).get("items", {}).get("nodes", []) or []
     
     project_item_by_issue = {}
-    issue_node_id_by_number = {}
+    issue_node_id_by_number = {} # Store mapping for faster item creation
     for it in item_nodes:
         cont = it.get("content")
         if cont and cont.get("number") is not None:
             project_item_by_issue[cont["number"]] = it
             issue_node_id_by_number[cont["number"]] = cont.get("id")
 
+
+    # mutation to create project item (add issue to project)
     mutation_create_item = """
     mutation($projectId: ID!, $contentId: ID!) {
       addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
@@ -418,6 +441,7 @@ else:
       }
     }
     """
+    # mutation to update field
     mutation_update_field = """
     mutation($project:ID!, $item:ID!, $field:ID!, $value: String!) {
       updateProjectV2ItemFieldValue(input:{
@@ -432,53 +456,68 @@ else:
     """
 
     def ensure_project_item_for_issue(issue_number: int) -> Optional[str]:
+        # if exists return id
         if issue_number in project_item_by_issue:
             return project_item_by_issue[issue_number]["id"]
-            
+        
+        # Check if we already have the node ID from the item list
         node_id = issue_node_id_by_number.get(issue_number)
+        
+        # If not, fetch issue node id:
         if not node_id:
             q = "query($owner:String!, $name:String!, $num:Int!){ repository(owner:$owner, name:$name) { issue(number:$num) { id } } }"
             res = run_graphql(q, {"owner": owner, "name": repo_name, "num": issue_number})
             node_id = res.get("data", {}).get("repository", {}).get("issue", {}).get("id")
             if not node_id:
                 return None
-            issue_node_id_by_number[issue_number] = node_id
+            issue_node_id_by_number[issue_number] = node_id # Store for later
 
+        # Create the item
         vars = {"projectId": project_id, "contentId": node_id}
         r = run_graphql(mutation_create_item, vars)
         item = r.get("data", {}).get("addProjectV2ItemById", {}).get("item")
         if item:
             item_id = item.get("id")
+            # update local map
             project_item_by_issue[issue_number] = {"id": item_id}
             return item_id
         return None
 
+    # update field helper
     def update_project_field(item_id: str, field_obj: Dict[str, Any], value: str):
         if not item_id or not field_obj or value is None:
             return
         vars = {"project": project_id, "item": item_id, "field": field_obj["id"], "value": value}
         run_graphql(mutation_update_field, vars)
 
+    # iterate created_or_updated_issues and set fields
     for rid, issue in created_or_updated_issues.items():
         issue_number = issue.get("number")
         if not issue_number:
             continue
             
+        # get project item id (create if missing)
         item_id = ensure_project_item_for_issue(issue_number)
+        
         if not item_id:
             print(f"⚠️ Could not find/create Project item for issue #{issue_number}")
             continue
 
+        # get the requirement attrs from requirements dict (we have rid)
         reqinfo = requirements.get(rid, {})
         attrs = reqinfo.get("attrs", {})
 
+        # map and update fields:
+        # System Requirement ID field gets the RID (hard mapping)
         if system_field:
             update_project_field(item_id, system_field, rid)
 
+        # Priority field from attr (if present)
         priority_val = attrs.get("Priority") or attrs.get("PRIORITY") or attrs.get("Severity") or ""
         if priority_field and priority_val:
             update_project_field(item_id, priority_field, priority_val)
 
+        # Label field: user asked to hard-code Requirement Label to "System Requirement"
         if label_field:
             update_project_field(item_id, label_field, HARDCODED_REQUIREMENT_LABEL)
 
