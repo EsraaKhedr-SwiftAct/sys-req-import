@@ -33,10 +33,17 @@ def parse_reqif_file(filepath):
     """
     Parses the ReqIF file. Returns a dictionary of requirements, 
     keyed by REQ-ID, or an empty dictionary on failure.
-    Uses generic Exception catching to bypass the previous import error.
+    Now reads the file explicitly with UTF-8 encoding for robustness.
     """
     try:
-        reqif_bundle = ReqIFParser.parse(filepath)
+        # Use explicit file reading with UTF-8 encoding
+        # This prevents hidden issues with the library's internal file handling.
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Use parse_string to process the read content
+        reqif_bundle = ReqIFParser.parse_string(content)
+        
         print(f"✅ Successfully parsed ReqIF file: {filepath}")
         
         requirements = {}
