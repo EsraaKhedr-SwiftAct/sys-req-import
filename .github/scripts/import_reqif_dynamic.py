@@ -5,9 +5,9 @@ import requests
 import json
 import glob
 from reqif.parser import ReqIFParser
-# NOTE: The explicit import of ReqIFException was removed to fix the ModuleNotFoundError.
-# We now catch the general Python Exception in the parsing function to ensure the script
-# runs and prints the specific underlying error message from the ReqIF library.
+# NOTE: The problematic line 'from reqif.exceptions import ReqIFException' has been removed
+# to fix the ModuleNotFoundError. We are now using a generic 'except Exception' to catch
+# the underlying ReqIF parsing error and print it.
 
 # --- Configuration and Constants ---
 REQIF_FILE_PATH = 'sample.reqif'
@@ -41,6 +41,7 @@ def parse_reqif_file(filepath):
         
         requirements = {}
         
+        # Check if spec_objects exist in the core content
         if reqif_bundle.core_content and reqif_bundle.core_content.spec_objects:
             for spec_object in reqif_bundle.core_content.spec_objects:
                 req_id = None
@@ -49,6 +50,7 @@ def parse_reqif_file(filepath):
                 
                 # Extract REQ-ID, REQ-TITLE, and REQ-DESC from the object's attributes
                 for attr_value in spec_object.attribute_map.values():
+                    # The definition.long_name is used to find the correct attribute
                     if attr_value.definition.long_name == 'REQ-ID':
                         req_id = attr_value.value
                     elif attr_value.definition.long_name == 'REQ-TITLE':
@@ -66,7 +68,7 @@ def parse_reqif_file(filepath):
         return requirements
 
     except Exception as e:
-        # Catch any error, which should now include the specific ReqIF/XML parsing error
+        # This will catch the specific XML/ReqIF parsing error if one occurs
         print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
         return {}
 
@@ -176,6 +178,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
