@@ -13,7 +13,7 @@ import sys
 import glob
 import json
 import requests
-import io # NEW: Import io for handling content as a stream
+import io 
 
 # NEW: Import the ReqIF library
 from reqif.parser import ReqIFParser
@@ -82,13 +82,12 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'desc': ... } }
     """
     try:
-        # FIX: Manually read file content and pass it as an in-memory stream (io.StringIO).
-        # This bypasses issues where the parser can't handle a file path or a raw string.
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # FIX: Read the file content as bytes ('rb' mode).
+        # The parser requires 'bytes' when content is not passed as a file path string.
+        with open(path, 'rb') as f:
+            content_bytes = f.read()
             
-        content_stream = io.StringIO(content)
-        reqif_bundle = ReqIFParser.parse(content_stream) 
+        reqif_bundle = ReqIFParser.parse(content_bytes) 
         
     except ReqIFParserException as e:
         # Catch library-specific parsing errors
