@@ -112,26 +112,38 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                 defnode = av.find(f"{REQIF_NS}DEFINITION") or av.find("DEFINITION")
                 def_ref = defnode.attrib.get("REF") if defnode is not None and defnode.attrib else None
                 
-                # Try common locations for the value
-                valnode = av.find(f"{REQIF_NS}THE-VALUE") or av.find("THE-VALUE")
-                if valnode is None:
-                     valnode = av.find(f"{REQIF_NS}VALUE") or av.find("VALUE")
-                
-                # Check for a value attribute (e.g., ATTRIBUTE-VALUE-INTEGER has a VALUE attr)
+                # --- START: Robust value extraction for attribute/sub-element value ---
                 value_text = None
-                if valnode is not None:
-                    value_text = valnode.text.strip() if valnode.text is not None else None
-                elif av.attrib.get("VALUE"):
-                    value_text = av.attrib.get("VALUE").strip()
-                elif av.text and av.text.strip():
-                    value_text = av.text.strip()
                 
-                if def_ref and value_text is not None:
+                # 1. Check for attribute 'THE-VALUE' (Used in your sample.reqif)
+                if av.attrib.get("THE-VALUE"):
+                    value_text = av.attrib.get("THE-VALUE")
+                # 2. Check for attribute 'VALUE'
+                elif av.attrib.get("VALUE"):
+                    value_text = av.attrib.get("VALUE")
+                
+                # 3. Check for child element 'THE-VALUE' or 'VALUE' (for Xhtml content or complex structures)
+                if value_text is None:
+                    valnode = av.find(f"{REQIF_NS}THE-VALUE") or av.find("THE-VALUE")
+                    if valnode is None:
+                         valnode = av.find(f"{REQIF_NS}VALUE") or av.find("VALUE")
+                    
+                    if valnode is not None and valnode.text is not None:
+                        value_text = valnode.text
+                
+                # 4. Check for text content directly on the attribute-value node itself
+                if value_text is None and av.text and av.text.strip():
+                    value_text = av.text
+                
+                if value_text is not None:
+                    value_text = value_text.strip()
+                # --- END: Robust value extraction ---
+                
+                if def_ref and value_text is not None and value_text: # Ensure value_text is not empty string
                     friendly = attr_def_map.get(def_ref, def_ref)
                     attrs[friendly] = value_text
 
         # Map to common titles/descriptions
-        # FIX: Added "Requirement Title" and "Requirement Description" to match the Long Names in sample.reqif
         title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text", "Requirement Title"]
         desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
         
@@ -197,7 +209,7 @@ def list_all_issues() -> List[Dict[str, Any]]:
 def create_issue_for_req(rid: str, info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     payload = {
         "title": f"{rid}: {info['title']}",
-        "body": info["full_issue_body"], # <-- FIX: Use the complete generated body
+        "body": info["full_issue_body"],
         "labels": [HARDCODED_REQUIREMENT_LABEL]
     }
     r = rest_request("POST", f"/repos/{REPO}/issues", json=payload)
@@ -211,7 +223,7 @@ def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] =
     """
     payload = {
         "title": f"{info['identifier']}: {info['title']}", 
-        "body": info["full_issue_body"], # <-- FIX: Use the complete generated body
+        "body": info["full_issue_body"],
     }
     if state:
          payload["state"] = state
@@ -222,10 +234,10 @@ def update_issue(issue_number: int, info: Dict[str, Any], state: Optional[str] =
 def close_issue(issue_number: int):
     rest_request("PATCH", f"/repos/{REPO}/issues/{issue_number}", json={"state": "closed"})
 
-# --- FIX: Prepare the full issue body text combining description and attributes ---
-# FIX: Added "Requirement Title" and "Requirement Description"
+# --- Prepare the full issue body text combining description and attributes ---
 title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text", "Requirement Title"]
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
+DEFAULT_FAILURE_BODY = "No description provided." # Key message to check for force-update
 
 for rid, info in requirements.items():
     attrs = info.get("attrs", {})
@@ -265,8 +277,8 @@ for rid, info in requirements.items():
 
     # Store the complete, single body string
     # If full_body is still empty (no desc/no attrs) use the fallback
-    info["full_issue_body"] = full_body or "No description provided."
-# --- END FIX: Full Issue Body ---
+    info["full_issue_body"] = full_body or DEFAULT_FAILURE_BODY
+# --- END: Full Issue Body ---
 
 
 # Fetch existing issues
@@ -288,8 +300,19 @@ for rid, info in requirements.items():
     if existing:
         existing_body = existing.get("body") or ""
         
-        # Check if an update is needed (title or body changed)
-        if existing_body.strip() != new_issue_body.strip() or existing['title'] != new_title:
+        # Check if an update is needed:
+        title_changed = existing['title'] != new_title
+        body_changed = existing_body.strip() != new_issue_body.strip()
+        
+        # --- FIX: Force update if the new body is correct but the old body was the default failure message ---
+        # This explicitly targets the "No change" scenario where the issue body is stuck on the error message.
+        force_update = (
+            new_issue_body.strip() != DEFAULT_FAILURE_BODY and 
+            existing_body.strip() == DEFAULT_FAILURE_BODY
+        )
+        # --- END FIX ---
+        
+        if title_changed or body_changed or force_update:
             
             state_to_set = None
             action_verb = "Updated"
@@ -524,5 +547,4 @@ else:
         print(f"🔧 Mapped fields for issue #{issue_number} (RID={rid})")
 
 print("✅ Completed ReqIF → GitHub synchronization (issues + project fields).")
-
 
