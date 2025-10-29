@@ -1,7 +1,10 @@
 name: Import ReqIF to GitHub
 
 on:
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+
+  # Triggers the workflow on push events for ReqIF files or the import script
   push:
     paths:
       - '**/*.reqif'
@@ -10,6 +13,8 @@ on:
 jobs:
   import-reqif:
     runs-on: ubuntu-latest
+    
+    # Required permissions for creating/updating issues and reading the repository content
     permissions:
       contents: read
       issues: write
@@ -25,10 +30,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests
+          # FIX: Installing 'requests' for API calls and 'reqif' for ReqIF parsing
+          pip install requests reqif
 
       - name: Run ReqIF Import Script
         env:
+          # Pass required secrets and context to the Python script
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
