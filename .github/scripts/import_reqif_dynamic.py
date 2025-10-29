@@ -239,6 +239,7 @@ title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirem
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
 DEFAULT_FAILURE_BODY = "No description provided." # Key message to check for force-update
 # V1.2.2: ADD A TEMPORARY MARKER TO FORCE UPDATE BY CHANGING THE BODY CONTENT
+# NOTE: This marker must be non-empty for the update to be forced!
 BODY_VERSION_MARKER = ""
 
 for rid, info in requirements.items():
@@ -308,7 +309,7 @@ for rid, info in requirements.items():
         # Check if an update is needed:
         title_changed = existing['title'] != new_title
         
-        # This will be TRUE because the new body now contains the unique BODY_VERSION_MARKER
+        # This will now be TRUE because the new body contains the unique BODY_VERSION_MARKER
         body_changed = existing_body.strip() != new_issue_body.strip()
         
         # This force_update check helps catch cases where the body was the default "No description provided."
