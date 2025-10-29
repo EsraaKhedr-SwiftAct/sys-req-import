@@ -238,6 +238,8 @@ def close_issue(issue_number: int):
 title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text", "Requirement Title"]
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
 DEFAULT_FAILURE_BODY = "No description provided." # Key message to check for force-update
+# V1.2.2: ADD A TEMPORARY MARKER TO FORCE UPDATE BY CHANGING THE BODY CONTENT
+BODY_VERSION_MARKER = ""
 
 for rid, info in requirements.items():
     attrs = info.get("attrs", {})
@@ -277,7 +279,10 @@ for rid, info in requirements.items():
 
     # Store the complete, single body string
     # If full_body is still empty (no desc/no attrs) use the fallback
-    info["full_issue_body"] = full_body or DEFAULT_FAILURE_BODY
+    final_body_content = full_body or DEFAULT_FAILURE_BODY
+    
+    # Appending a unique, hidden comment ensures the body changes and forces the update this one time.
+    info["full_issue_body"] = final_body_content.strip() + "\n\n" + BODY_VERSION_MARKER
 # --- END: Full Issue Body ---
 
 
@@ -302,16 +307,15 @@ for rid, info in requirements.items():
         
         # Check if an update is needed:
         title_changed = existing['title'] != new_title
-        # Check body change robustly by stripping leading/trailing whitespace
+        
+        # This will be TRUE because the new body now contains the unique BODY_VERSION_MARKER
         body_changed = existing_body.strip() != new_issue_body.strip()
         
-        # --- FIX: Force update if the new body is correct but the old body was the default failure message ---
-        # This explicitly targets the "No change" scenario where the issue body is stuck on the error message.
+        # This force_update check helps catch cases where the body was the default "No description provided."
         force_update = (
             new_issue_body.strip() != DEFAULT_FAILURE_BODY and 
-            existing_body.strip() == DEFAULT_FAILURE_BODY
+            existing_body.strip().replace(BODY_VERSION_MARKER, "").strip() == DEFAULT_FAILURE_BODY # Check without the marker if it's the default
         )
-        # --- END FIX ---
         
         if title_changed or body_changed or force_update:
             
@@ -325,7 +329,8 @@ for rid, info in requirements.items():
             ok = update_issue(existing["number"], {"identifier": rid, "title": info["title"], "full_issue_body": info["full_issue_body"]}, state=state_to_set) 
             
             if ok:
-                print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']}")
+                # The log should now show this message for REQ-001, REQ-002, and REQ-003
+                print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']} (FORCED UPDATE)")
             else:
                 print(f"⚠️ Failed to update issue for {rid}")
         else:
