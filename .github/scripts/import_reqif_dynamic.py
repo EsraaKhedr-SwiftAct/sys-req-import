@@ -14,6 +14,7 @@ import glob
 import json
 import requests
 import io 
+import traceback # NEW: Import for detailed error logging
 
 # NEW: Import the ReqIF library
 from reqif.parser import ReqIFParser
@@ -78,21 +79,26 @@ print(f"📄 Parsing ReqIF: {REQIF_FILE} using reqif library.")
 # -------------------------
 def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
     """
-    Parses a ReqIF file using the 'reqif' library.
+    Parses a ReqIF file using the 'reqif' library by passing the file path (standard approach).
     Returns mapping: { rid: { 'title': ..., 'attrs': { long_name: value, ... }, 'desc': ... } }
     """
     try:
-        # FIX: Pass the file path (str) directly. 
-        # The library is designed to open and parse the file itself when given a path string.
-        # This bypasses the in-memory content confusion (bytes/BytesIO).
+        # FIX: Pass the file path (str) directly. This is the correct, standard usage 
+        # and avoids the issues encountered with manual content or stream passing.
         reqif_bundle = ReqIFParser.parse(path) 
         
     except ReqIFParserException as e:
-        # Catch library-specific parsing errors
-        raise Exception(f"ReqIF library failed to parse file: {e}")
+        # Catch library-specific parsing errors and ensure verbose output
+        print(f"--- ReqIFParserException ---", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        print("----------------------------", file=sys.stderr)
+        raise Exception(f"ReqIF library failed to parse file (ReqIFParserException): {e}")
     except Exception as e:
-        # Catch file read errors or other exceptions
-        raise Exception(f"An unexpected error occurred during ReqIF parsing: {e}")
+        # Catch generic errors and ensure verbose output is directed to stderr
+        print("--- GENERIC ERROR TRACEBACK ---", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        print("-------------------------------", file=sys.stderr)
+        raise Exception(f"An unexpected error occurred during ReqIF parsing: {type(e).__name__}: {e}")
 
 
     results = {}
@@ -156,6 +162,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
 try:
     requirements = parse_reqif(REQIF_FILE)
 except Exception as e:
+    # This exception will contain the verbose error details if the above fix works
     print("❌ Failed to parse ReqIF file:", e)
     sys.exit(1)
 
