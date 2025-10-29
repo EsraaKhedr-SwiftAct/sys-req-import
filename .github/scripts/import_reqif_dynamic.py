@@ -302,6 +302,7 @@ for rid, info in requirements.items():
         
         # Check if an update is needed:
         title_changed = existing['title'] != new_title
+        # Check body change robustly by stripping leading/trailing whitespace
         body_changed = existing_body.strip() != new_issue_body.strip()
         
         # --- FIX: Force update if the new body is correct but the old body was the default failure message ---
@@ -547,4 +548,3 @@ else:
         print(f"🔧 Mapped fields for issue #{issue_number} (RID={rid})")
 
 print("✅ Completed ReqIF → GitHub synchronization (issues + project fields).")
-
