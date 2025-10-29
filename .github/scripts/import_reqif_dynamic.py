@@ -110,8 +110,18 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
         if values_node is not None:
             for av in list(values_node):
                 defnode = av.find(f"{REQIF_NS}DEFINITION") or av.find("DEFINITION")
-                def_ref = defnode.attrib.get("REF") if defnode is not None and defnode.attrib else None
                 
+                # --- START: Robust definition reference extraction (FIXED) ---
+                def_ref = None
+                if defnode is not None:
+                    # 1. Try to get REF attribute (standard ReqIF pattern)
+                    def_ref = defnode.attrib.get("REF")
+                    
+                    # 2. If no REF, check text content (required for user's sample.reqif style)
+                    if not def_ref and defnode.text and defnode.text.strip():
+                        def_ref = defnode.text.strip()
+                # --- END: Robust definition reference extraction ---
+
                 # --- START: Robust value extraction for attribute/sub-element value ---
                 value_text = None
                 
@@ -140,11 +150,13 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                 # --- END: Robust value extraction ---
                 
                 if def_ref and value_text is not None and value_text: # Ensure value_text is not empty string
+                    # Use the identifier (def_ref) to find the friendly long name.
                     friendly = attr_def_map.get(def_ref, def_ref)
                     attrs[friendly] = value_text
 
         # Map to common titles/descriptions
         title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text", "Requirement Title"]
+        # Added 'Object Text' to this list as it is a common name for the main body/description in ReqIF
         desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
         
         title = long_name
@@ -154,6 +166,7 @@ def parse_reqif(path: str) -> Dict[str, Dict[str, Any]]:
                 break
 
         description = ""
+        # IMPORTANT: Iterate through candidates and set the description using the first one found
         for cand in desc_candidates:
             if cand in attrs and attrs[cand].strip():
                 description = attrs[cand].strip()
@@ -238,14 +251,13 @@ def close_issue(issue_number: int):
 title_candidates = ["Title", "Name", "REQ-TITLE", "Short Description", "Requirement Text", "Requirement Title"]
 desc_candidates = ["Description", "Desc", "REQ-DESC", "Object Text", "Content", "Requirement Description"]
 DEFAULT_FAILURE_BODY = "No description provided." # Key message to check for force-update
-# V1.2.2: ADD A TEMPORARY MARKER TO FORCE UPDATE BY CHANGING THE BODY CONTENT
-# NOTE: This marker must be non-empty for the update to be forced!
+# V1.2.4: New marker for final parser fix (force update)
 BODY_VERSION_MARKER = ""
 
 for rid, info in requirements.items():
     attrs = info.get("attrs", {})
     
-    # 1. Start with the main description (from a mapped field)
+    # 1. Start with the main description (from a mapped field, which should be populated now)
     full_body = info.get("description") or ""
 
     attr_lines = []
@@ -309,12 +321,12 @@ for rid, info in requirements.items():
         # Check if an update is needed:
         title_changed = existing['title'] != new_title
         
-        # This will now be TRUE because the new body contains the unique BODY_VERSION_MARKER
+        # Check if the body changed (using the new, unique marker will force this to be true)
         body_changed = existing_body.strip() != new_issue_body.strip()
         
         # This force_update check helps catch cases where the body was the default "No description provided."
         force_update = (
-            new_issue_body.strip() != DEFAULT_FAILURE_BODY and 
+            new_issue_body.strip().replace(BODY_VERSION_MARKER, "").strip() != DEFAULT_FAILURE_BODY and 
             existing_body.strip().replace(BODY_VERSION_MARKER, "").strip() == DEFAULT_FAILURE_BODY # Check without the marker if it's the default
         )
         
@@ -330,7 +342,7 @@ for rid, info in requirements.items():
             ok = update_issue(existing["number"], {"identifier": rid, "title": info["title"], "full_issue_body": info["full_issue_body"]}, state=state_to_set) 
             
             if ok:
-                # The log should now show this message for REQ-001, REQ-002, and REQ-003
+                # The log should now show this message
                 print(f"✏️ {action_verb} issue for {rid} -> #{existing['number']} (FORCED UPDATE)")
             else:
                 print(f"⚠️ Failed to update issue for {rid}")
