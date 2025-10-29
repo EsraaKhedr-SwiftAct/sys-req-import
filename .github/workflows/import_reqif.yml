@@ -1,42 +1,33 @@
 name: Import ReqIF to GitHub
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
-  # Triggers the workflow on push events for ReqIF files or the import script
   push:
     paths:
       - '**/*.reqif'
-      - '.github/scripts/import_reqif_dynamic.py'
+      - '**/*.reqifz'
+      - 'import_reqif_dynamic.py'
 
 jobs:
   import-reqif:
     runs-on: ubuntu-latest
-    
-    # Required permissions for creating/updating issues and reading the repository content
-    permissions:
-      contents: read
-      issues: write
-
     steps:
-      - name: Checkout repository
+      - name: 🧰 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.13'
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: |
-          # FIX: Installing 'requests' for API calls and 'reqif' for ReqIF parsing
-          pip install requests reqif
+          pip install strictdoc lxml requests
 
-      - name: Run ReqIF Import Script
+      - name: 🚀 Run ReqIF Importer
         env:
-          # Pass required secrets and context to the Python script
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PROJECT_NAME: Test Project
         run: |
-          python .github/scripts/import_reqif_dynamic.py
+          python import_reqif_dynamic.py
