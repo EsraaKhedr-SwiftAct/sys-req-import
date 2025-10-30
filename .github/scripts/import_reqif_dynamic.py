@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import requests
+import traceback # NEW: Import for detailed error logging
 # FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
 from reqif.parser import ReqIFParser
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
@@ -125,11 +126,14 @@ def process_reqif_files():
                     print(f"  Skipping SpecObject with identifier '{spec_object.identifier}' - Missing required attributes.")
 
         except Exception as e:
-            print(f"Failed to process {file_path}: {e}")
+            # CRITICAL FIX: Print the full traceback to diagnose parsing failure
+            print(f"Failed to process {file_path}. Details below:")
+            traceback.print_exc()
             # Continue to the next file if one fails
 
 if __name__ == "__main__":
     process_reqif_files()
+
 
 
 
