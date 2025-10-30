@@ -1,34 +1,26 @@
 import sys
 import os
 
-# Path to the folder containing __init__.py
+# Directory of this script
 scripts_dir = os.path.dirname(__file__)
-inner_strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed", "strictdoc_local_fixed")
-sys.path.insert(0, inner_strictdoc_path)
 
-# Now you can import strictdoc
-import strictdoc
+# Path to the inner folder inside the zip that contains __init__.py
+strictdoc_inner_path = os.path.join(scripts_dir, "strictdoc_local_fixed", "strictdoc_local_fixed")
+sys.path.insert(0, strictdoc_inner_path)
+
+# Import the module using the actual folder name
+import strictdoc_local_fixed as strictdoc
 import pkgutil
 
-
-import glob
-import requests
-import traceback # NEW: Import for detailed error logging
-# FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
-# FIXED: Use StrictDoc ReqIF parser (fully implemented)
+# Import the ReqIF parser
 from reqif_importer import ReqIFImporter as ReqIFParser
 
-
-
-
-# 🧩 Optional diagnostic block (helps confirm correct installation)
-import strictdoc, pkgutil
+# Optional diagnostic to verify import
 print("StrictDoc imported from:", strictdoc.__file__)
-for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
-    if "reqif" in name:
-        print("Found module:", name)
+for _, name, _ in pkgutil.iter_modules(strictdoc.__path__):
+    print("Found module:", name)
 
-# Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
+
 
 # --- Configuration ---
 # GitHub API base URL
