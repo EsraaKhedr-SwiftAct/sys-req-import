@@ -16,29 +16,27 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Python dependencies
-        run: |
-          echo "# 1. Install required dependencies"
-          pip install --upgrade pip setuptools wheel requests lxml
-
-          echo "# 2. Install StrictDoc with ReqIF importer (v0.0.46)"
-          pip install --no-cache-dir git+https://github.com/openreqif/strictdoc.git@reqif_legacy
-
-
-
-          echo "# 3. Confirm StrictDoc reqif module exists"
-          python - <<'PY'
-          import pkgutil, strictdoc
-          print("StrictDoc installed at:", strictdoc.__file__)
-          found = False
-          for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
-              if "reqif" in name:
-                  print("  ✅ found:", name)
-                  found = True
-          if not found:
-              raise SystemExit("❌ ERROR: 'reqif' modules not found in StrictDoc!")
-          PY
-
+	- name: Install Python dependencies
+	  run: |
+	    echo "# 1. Install required dependencies"
+	    pip install --upgrade pip setuptools wheel requests lxml
+	
+	    echo "# 2. Install StrictDoc (public legacy fork with ReqIF importer)"
+	    pip install --no-cache-dir git+https://github.com/openreqif/strictdoc.git@reqif_legacy
+	
+	    echo "# 3. Confirm StrictDoc reqif module exists"
+	    python - <<'PY'
+	    import pkgutil, strictdoc
+	    print("StrictDoc installed at:", strictdoc.__file__)
+	    found = False
+	    for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
+	        if "reqif" in name:
+	            print("  ✅ found:", name)
+	            found = True
+	    if not found:
+	        raise SystemExit("❌ ERROR: 'reqif' modules not found in StrictDoc!")
+	    PY
+      
       - name: Execute the script
         run: |
           echo "# 4. Execute the script"
