@@ -5,7 +5,7 @@ import requests
 import traceback # NEW: Import for detailed error logging
 # FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
 # FIXED: Use StrictDoc ReqIF parser (fully implemented)
-from strictdoc.export.reqif.sdoc_reqif_parser import SDocReqIFParser as ReqIFParser
+from strictdoc.backend.reqif.importer import ReqIFImporter as ReqIFParser
 
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
@@ -111,7 +111,7 @@ def process_reqif_files():
         print(f"\n--- Processing file: {file_path} ---")
         try:
             # Use ReqIFParser.parse() to load the file, which returns a ReqIFBundle
-            reqif_data = ReqIFParser.parse(file_path)
+            reqif_data = ReqIFParser().import_from_file(file_path)
 
             # The ReqIFBundle object has a 'spec_objects' list
             for spec_object in reqif_data.spec_objects:
