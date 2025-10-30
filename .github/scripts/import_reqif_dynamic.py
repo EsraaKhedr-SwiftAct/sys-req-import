@@ -5,7 +5,7 @@ import requests
 import traceback # NEW: Import for detailed error logging
 # FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
 # FIXED: Use StrictDoc ReqIF parser (fully implemented)
-from strictdoc.backend.reqif.importer import ReqIFImporter as ReqIFParser
+from strictdoc.plugins.importers.reqif.importer import ReqIFImporter as ReqIFParser
 
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
