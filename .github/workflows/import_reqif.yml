@@ -1,20 +1,14 @@
-name: Import ReqIF to GitHub
+name: Import ReqIF
 
 on:
-  # This section ensures the workflow runs automatically when you push
-  # any changes to a file ending in .reqif or to the Python script itself.
+  workflow_dispatch:
   push:
-    paths:
-      - '**/*.reqif'
-      - '.github/scripts/import_reqif_dynamic.py'
+    branches:
+      - main
 
 jobs:
   import-reqif:
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: read
-      issues: write
 
     steps:
       - name: Checkout repository
@@ -23,17 +17,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: 3.x
 
-      # FIX: This single step installs the 'reqif' dependency and executes 
-      # the script in the same environment, resolving the "not installed" error.
-      - name: Install dependencies and Run ReqIF Import Script 🚀
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Install dependencies
         run: |
-          # 1. Install both required dependencies
-          pip install requests reqif
-          
-          # 2. Execute the script
+          echo "# 1. Install both required dependencies"
+          pip install requests
+          pip install git+https://github.com/strictdoc-project/reqif.git
+
+      - name: Run ReqIF Import Script
+        run: |
+          echo "# 2. Execute the script"
           python .github/scripts/import_reqif_dynamic.py
