@@ -5,9 +5,7 @@ import requests
 import json
 import glob
 from reqif.parser import ReqIFParser
-# NOTE: The problematic line 'from reqif.exceptions import ReqIFException' has been removed
-# to fix the ModuleNotFoundError. We are now using a generic 'except Exception' to catch
-# the underlying ReqIF parsing error and print it.
+# NOTE: Removed the problematic dependency on ReqIFException.
 
 # --- Configuration and Constants ---
 REQIF_FILE_PATH = 'sample.reqif'
@@ -31,18 +29,13 @@ HEADERS = {
 
 def parse_reqif_file(filepath):
     """
-    Parses the ReqIF file. Returns a dictionary of requirements, 
-    keyed by REQ-ID, or an empty dictionary on failure.
-    Now reads the file explicitly with UTF-8 encoding for robustness.
+    Parses the ReqIF file by passing the filepath directly to the parser. 
+    Returns a dictionary of requirements, keyed by REQ-ID, or an empty dictionary on failure.
     """
     try:
-        # Use explicit file reading with UTF-8 encoding
-        # This prevents hidden issues with the library's internal file handling.
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # Use parse_string to process the read content
-        reqif_bundle = ReqIFParser.parse_string(content)
+        # CORRECTED: Use ReqIFParser.parse(filepath) which is the correct static
+        # method to parse the file using its path, resolving the 'parse_string' error.
+        reqif_bundle = ReqIFParser.parse(filepath)
         
         print(f"✅ Successfully parsed ReqIF file: {filepath}")
         
@@ -80,7 +73,7 @@ def parse_reqif_file(filepath):
         return {}
 
 
-# --- GitHub API Functions ---
+# --- GitHub API Functions (Unchanged) ---
 
 def find_issue_by_title(title_prefix):
     """
@@ -138,7 +131,7 @@ def create_issue(title, body):
         return None
 
 
-# --- Main Logic ---
+# --- Main Logic (Unchanged) ---
 
 def main():
     print(f"Starting ReqIF synchronization for repository: {GITHUB_REPOSITORY}")
@@ -185,7 +178,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
