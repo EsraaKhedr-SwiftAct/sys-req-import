@@ -110,12 +110,14 @@ def process_reqif_files():
     """
     Scans the repository for all ReqIF files and processes them.
     """
+    import glob
+    import traceback
+
     github_token = os.environ.get("GITHUB_TOKEN")
     repo_full_name = os.environ.get("GITHUB_REPOSITORY")
 
     if not github_token or not repo_full_name:
-        print("Error: GITHUB_TOKEN or GITHUB_REPOSITORY environment variables not set.")
-        # We don't exit here to allow local testing without the token
+        print("Warning: GITHUB_TOKEN or GITHUB_REPOSITORY environment variables not set. Running in local/mock mode.")
 
     reqif_files = glob.glob('**/*.reqif', recursive=True)
 
@@ -128,8 +130,9 @@ def process_reqif_files():
     for file_path in reqif_files:
         print(f"\n--- Processing file: {file_path} ---")
         try:
-            # Use ReqIFParser.parse() to load the file, which returns a ReqIFBundle
-            reqif_data = ReqIFParser.parse(file_path)
+            # Create an instance of ReqIFImporter with the file path
+            parser = ReqIFParser(file_path)
+            reqif_data = parser.parse()
 
             # The ReqIFBundle object has a 'spec_objects' list
             for spec_object in reqif_data.spec_objects:
@@ -143,13 +146,14 @@ def process_reqif_files():
                     # Process and create GitHub Issue
                     create_or_update_github_issue(req_id, title, description, github_token, repo_full_name)
                 else:
-                    print(f"  Skipping SpecObject with identifier '{spec_object.identifier}' - Missing required attributes.")
+                    print(f"  Skipping SpecObject with identifier '{getattr(spec_object, 'identifier', 'UNKNOWN')}' - Missing required attributes.")
 
         except Exception as e:
-            # CRITICAL FIX: Print the full traceback to diagnose parsing failure
+            # Print the full traceback to diagnose parsing failure
             print(f"Failed to process {file_path}. Details below:")
             traceback.print_exc()
             # Continue to the next file if one fails
+
 
 if __name__ == "__main__":
     process_reqif_files()
