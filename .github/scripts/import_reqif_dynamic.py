@@ -5,6 +5,7 @@ import requests
 import json
 import glob
 from reqif.parser import ReqIFParser
+import traceback # NEW: Import traceback for detailed error logging
 # NOTE: Removed the problematic dependency on ReqIFException.
 
 # --- Configuration and Constants ---
@@ -68,8 +69,12 @@ def parse_reqif_file(filepath):
         return requirements
 
     except Exception as e:
-        # This will catch the specific XML/ReqIF parsing error if one occurs
+        # MODIFIED: Print the full traceback to diagnose the root cause of the empty error message.
         print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
+        print("--- FULL TRACEBACK START ---")
+        # Print the traceback using the imported module
+        print(traceback.format_exc())
+        print("--- FULL TRACEBACK END ---")
         return {}
 
 
@@ -178,7 +183,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
