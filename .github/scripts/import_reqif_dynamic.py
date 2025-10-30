@@ -7,6 +7,7 @@ import traceback # NEW: Import for detailed error logging
 # FIXED: Use StrictDoc ReqIF parser (fully implemented)
 from strictdoc.plugins.importers.reqif.importer import ReqIFImporter as ReqIFParser
 
+
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
 # --- Configuration ---
