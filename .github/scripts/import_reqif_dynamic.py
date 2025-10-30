@@ -2,11 +2,15 @@ import sys
 import os
 
 scripts_dir = os.path.dirname(__file__)
-strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed")
+
+# Path to the folder containing the inner strictdoc module
+strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed", "strictdoc_local_fixed")
 sys.path.insert(0, strictdoc_path)
 
-# Now you can import
-import strictdoc_local_fixed as strictdoc
+# Now import the module
+import strictdoc
+import pkgutil
+
 import glob
 import requests
 import traceback # NEW: Import for detailed error logging
