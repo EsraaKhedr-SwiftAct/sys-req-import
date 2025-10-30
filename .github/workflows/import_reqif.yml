@@ -22,7 +22,7 @@ jobs:
           pip install --upgrade pip setuptools wheel requests lxml
 
           echo "# 2. Install StrictDoc with ReqIF importer (v0.0.46)"
-          pip install --no-cache-dir git+https://github.com/strictdoc-project/strictdoc.git@2c6f8e923ad2a9de29c22d4cbb379b3d1c5b9934
+          pip install --no-cache-dir git+https://github.com/ahmedelsayedeng/strictdoc.git@reqif_legacy
 
 
           echo "# 3. Confirm StrictDoc reqif module exists"
