@@ -19,14 +19,10 @@ jobs:
         with:
           python-version: 3.x
 
-	- name: Install dependencies
-	  run: |
-	    pip install --upgrade pip setuptools wheel
-	    pip uninstall -y reqif || true
-	    pip install requests
-	    pip install --no-cache-dir git+https://github.com/strictdoc-project/strictdoc.git@main
-      
-      - name: Run ReqIF Import Script
+      - name: Install dependencies
         run: |
-          echo "# 2. Execute the script"
-          python .github/scripts/import_reqif_dynamic.py
+          echo "# 1. Install required dependencies"
+          pip install --upgrade pip setuptools wheel
+          pip uninstall -y reqif || true
+          pip install requests
+          # Install the
