@@ -1,7 +1,14 @@
-name: Import System Requirements from ReqIF
+name: Import ReqIF
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  metadata: read
 
 jobs:
   import-reqif:
@@ -14,28 +21,26 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: 3.x
 
       - name: Install dependencies
         run: |
           echo "# 1. Install Python dependencies"
           pip install --upgrade pip setuptools wheel requests lxml
 
-      - name: Unpack local StrictDoc substitute
+      - name: Unpack strictdoc_local_fixed
         run: |
           echo "# 2. Unpack strictdoc_local_fixed.zip"
           mkdir -p .github/scripts
           unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
-
           echo "Contents of strictdoc_local_fixed (after extraction):"
           ls -R .github/scripts/strictdoc_local_fixed || true
 
-      - name: Execute the script
+      - name: Execute import script using local parser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "# 3. Execute the import script using local parser"
-          # Add the unzipped folder to PYTHONPATH so Python can import reqif_importer
           export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
           python .github/scripts/import_reqif_dynamic.py
