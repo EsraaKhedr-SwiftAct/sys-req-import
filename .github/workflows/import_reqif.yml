@@ -22,8 +22,10 @@ jobs:
       - name: Install dependencies
         run: |
           echo "# 1. Install both required dependencies"
+          pip install --upgrade pip setuptools wheel
+          pip uninstall -y reqif || true
           pip install requests
-          pip install git+https://github.com/strictdoc-project/reqif.git
+          pip install --no-cache-dir git+https://github.com/strictdoc-project/reqif.git@main
 
       - name: Run ReqIF Import Script
         run: |
