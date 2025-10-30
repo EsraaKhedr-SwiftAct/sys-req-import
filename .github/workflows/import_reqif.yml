@@ -27,10 +27,12 @@ jobs:
           mkdir -p .github/scripts
           unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
 
-          echo "Contents of strictdoc_local (after extraction):"
-          ls -R .github/scripts/strictdoc_local || true
+          echo "Contents of strictdoc_local_fixed (after extraction):"
+          ls -R .github/scripts/strictdoc_local_fixed || true
 
       - name: Execute the script
         run: |
           echo "# 3. Execute the import script using local parser"
+          # Add the unzipped folder to PYTHONPATH so Python can import reqif_importer
+          export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
           python .github/scripts/import_reqif_dynamic.py
