@@ -1,12 +1,12 @@
-import os
-import sys
-
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "strictdoc_local"))
 import glob
 import requests
 import traceback # NEW: Import for detailed error logging
 # FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
 # FIXED: Use StrictDoc ReqIF parser (fully implemented)
-from strictdoc_local import ReqIFImporter as ReqIFParser
+from reqif_importer import ReqIFImporter as ReqIFParser
+
 
 
 
