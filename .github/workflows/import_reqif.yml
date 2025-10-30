@@ -31,6 +31,9 @@ jobs:
           ls -R .github/scripts/strictdoc_local_fixed || true
 
       - name: Execute the script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "# 3. Execute the import script using local parser"
           # Add the unzipped folder to PYTHONPATH so Python can import reqif_importer
