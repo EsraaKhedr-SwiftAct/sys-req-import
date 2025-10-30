@@ -1,10 +1,9 @@
 import sys
 import os
-import glob           # <-- Add this line
+import glob
 import requests
 import traceback
 import pkgutil
-
 
 # Directory of this script
 scripts_dir = os.path.dirname(__file__)
@@ -15,7 +14,6 @@ sys.path.insert(0, strictdoc_inner_path)
 
 # Import the module using the actual folder name
 import strictdoc_local_fixed as strictdoc
-import pkgutil
 
 # Import the ReqIF parser
 from reqif_importer import ReqIFImporter as ReqIFParser
@@ -25,59 +23,18 @@ print("StrictDoc imported from:", strictdoc.__file__)
 for _, name, _ in pkgutil.iter_modules(strictdoc.__path__):
     print("Found module:", name)
 
-
-
 # --- Configuration ---
-# GitHub API base URL
 GITHUB_API_URL = "https://api.github.com/repos"
-# Expected attribute names/IDs in the ReqIF file
-REQIF_ATTRIBUTES = {
-    'id': 'REQ-ID',
-    'title': 'REQ-TITLE',
-    'description': 'REQ-DESC'
-}
-
-def find_attribute_value(spec_object, definition_id):
-    """
-    Utility function to reliably find an attribute value in a SpecObject
-    based on its Definition ID (e.g., 'REQ-TITLE').
-    """
-    for attribute_value in spec_object.values:
-        # Check if the attribute definition matches the target ID
-        if (attribute_value.definition and 
-            hasattr(attribute_value.definition, 'identifier') and
-            attribute_value.definition.identifier == definition_id):
-
-            # Attribute values can be of different types, check for 'the_value'
-            if hasattr(attribute_value, 'the_value'):
-                # Clean up the value if it's a string, removing leading/trailing whitespace
-                if isinstance(attribute_value.the_value, str):
-                    # Simple HTML/XHTML cleanup for descriptions is often needed
-                    return attribute_value.the_value.replace('</p>', '\n').replace('<p>', '').strip()
-                return str(attribute_value.the_value).strip()
-    return None
 
 def create_or_update_github_issue(req_id, title, body, github_token, repo_full_name):
-    """
-    Placeholder for GitHub API interaction. In a real scenario, this function
-    would search existing issues by a specific tag or title format (e.g., "[REQ] REQ-001")
-    and either update it or create a new one.
-
-    For this example, we will just create a new issue for demonstration.
-    """
     headers = {
         "Authorization": f"Bearer {github_token}",
         "Accept": "application/vnd.github.com"
     }
     url = f"{GITHUB_API_URL}/{repo_full_name}/issues"
 
-    # Define the issue title and body
     issue_title = f"[{req_id}] {title}"
     issue_body = f"## ReqIF Requirement: {req_id}\n\n**Title:** {title}\n\n---\n\n**Description:**\n\n{body}"
-
-    # NOTE: In a complete implementation, you would check for an existing issue
-    # by searching: GET /search/issues?q={req_id}+in:title+repo:{repo_full_name}
-    # If found, you'd use PATCH (update), otherwise POST (create).
 
     print(f"Creating/Updating Issue for ID: {req_id}...")
 
@@ -88,31 +45,11 @@ def create_or_update_github_issue(req_id, title, body, github_token, repo_full_n
     }
 
     try:
-        # Since we cannot make live API calls, we mock the result here.
-        # To enable real GitHub API calls, uncomment the block below:
-        #
-        # response = requests.post(url, headers=headers, json=payload)
-        # response.raise_for_status()
-        # print(f"  Successfully created issue for {req_id}. Status: {response.status_code}")
-        
         print(f"  [Mock API Call] Successfully prepared data for issue: {issue_title}") 
-
-    except requests.exceptions.HTTPError as err:
-        # print(f"Error processing requirement {req_id}: {err}")
-        # print(f"GitHub API response: {response.text}")
-        pass # Suppress real errors for mock
-
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
-
 def process_reqif_files():
-    """
-    Scans the repository for all ReqIF files and processes them.
-    """
-    import glob
-    import traceback
-
     github_token = os.environ.get("GITHUB_TOKEN")
     repo_full_name = os.environ.get("GITHUB_REPOSITORY")
 
@@ -130,33 +67,28 @@ def process_reqif_files():
     for file_path in reqif_files:
         print(f"\n--- Processing file: {file_path} ---")
         try:
-            # Create an instance of ReqIFImporter with the file path
+            # Parse the ReqIF file
             parser = ReqIFParser(file_path)
-            reqif_data = parser.parse()
+            requirements = parser.parse()  # <-- returns a list of dicts
 
-            # The ReqIFBundle object has a 'spec_objects' list
-            for spec_object in reqif_data.spec_objects:
-                # Use the robust finder to get the specific attributes
-                req_id = find_attribute_value(spec_object, REQIF_ATTRIBUTES['id'])
-                title = find_attribute_value(spec_object, REQIF_ATTRIBUTES['title'])
-                description = find_attribute_value(spec_object, REQIF_ATTRIBUTES['description'])
+            for req in requirements:
+                req_id = req.get('id', 'UNKNOWN')
+                title = req.get('title', 'Untitled Requirement')
+                description = req.get('description', '')
 
-                if req_id and title and description:
+                if req_id and title:
                     print(f"  Extracted -> ID: {req_id}, Title: {title[:40]}...")
-                    # Process and create GitHub Issue
                     create_or_update_github_issue(req_id, title, description, github_token, repo_full_name)
                 else:
-                    print(f"  Skipping SpecObject with identifier '{getattr(spec_object, 'identifier', 'UNKNOWN')}' - Missing required attributes.")
+                    print(f"  Skipping requirement with missing required attributes: {req}")
 
-        except Exception as e:
-            # Print the full traceback to diagnose parsing failure
+        except Exception:
             print(f"Failed to process {file_path}. Details below:")
             traceback.print_exc()
-            # Continue to the next file if one fails
-
 
 if __name__ == "__main__":
     process_reqif_files()
+
 
 
 
