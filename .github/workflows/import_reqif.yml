@@ -1,10 +1,7 @@
-name: Import ReqIF
+name: Import ReqIF Requirements
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   import-reqif:
@@ -17,23 +14,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"  # ✅ Compatible with lxml 4.9.x and StrictDoc 0.0.49
+          python-version: '3.11'
 
       - name: Install system dependencies
         run: |
-          echo "# Installing system dependencies for lxml"
           sudo apt-get update
-          sudo apt-get install -y libxml2-dev libxslt-dev python3-dev
+          sudo apt-get install -y libxml2-dev libxslt-dev python3-dev git
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           echo "# 1. Install required dependencies"
-          pip install --upgrade pip setuptools wheel
-          pip uninstall -y reqif || true
-          pip install requests
-          pip install --no-cache-dir git+https://github.com/strictdoc-project/strictdoc.git@0.0.49
+          pip install --upgrade pip setuptools wheel requests
 
-      - name: Run ReqIF Import Script
+          echo "# 2. Clone and install StrictDoc from source (tag 0.0.49)"
+          git clone --branch 0.0.49 https://github.com/strictdoc-project/strictdoc.git
+          pip install -e ./strictdoc
+
+          echo "# 3. Confirm StrictDoc installation"
+          python - <<'PY'
+          import pkgutil, strictdoc
+          print("StrictDoc installed at:", strictdoc.__file__)
+          for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
+              if "reqif" in name:
+                  print("  found:", name)
+          PY
+
+      - name: Execute ReqIF import script
         run: |
-          echo "# 2. Execute the script"
+          echo "# 4. Execute the script"
           python .github/scripts/import_reqif_dynamic.py

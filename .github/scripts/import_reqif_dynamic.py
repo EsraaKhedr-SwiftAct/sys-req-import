@@ -8,6 +8,12 @@ import traceback # NEW: Import for detailed error logging
 from strictdoc.export.reqif.sdoc_reqif_parser import SDocReqIFParser as ReqIFParser
 
 
+# 🧩 Optional diagnostic block (helps confirm correct installation)
+import strictdoc, pkgutil
+print("StrictDoc imported from:", strictdoc.__file__)
+for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
+    if "reqif" in name:
+        print("Found module:", name)
 
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
