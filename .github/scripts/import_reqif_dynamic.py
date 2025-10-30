@@ -2,8 +2,9 @@ import os
 import sys
 import glob
 import requests
-# FIX: Correcting the import path to resolve ImportError
-from reqif.reqif import ReqIf
+# FIX: Correcting the import path to use the modern ReqIFParser class, which resolves the ModuleNotFoundError
+from reqif.reqif_parser import ReqIFParser
+# Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
 # --- Configuration ---
 # GitHub API base URL
@@ -45,7 +46,7 @@ def create_or_update_github_issue(req_id, title, body, github_token, repo_full_n
     """
     headers = {
         "Authorization": f"Bearer {github_token}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.com"
     }
     url = f"{GITHUB_API_URL}/{repo_full_name}/issues"
 
@@ -66,11 +67,13 @@ def create_or_update_github_issue(req_id, title, body, github_token, repo_full_n
     }
 
     try:
-        # Using a dummy API call here. Replace with actual logic if needed.
-        # For a full demonstration, this would be uncommented:
+        # Since we cannot make live API calls, we mock the result here.
+        # To enable real GitHub API calls, uncomment the block below:
+        #
         # response = requests.post(url, headers=headers, json=payload)
         # response.raise_for_status()
-        # print(f"Successfully created issue for {req_id}. Status: {response.status_code}")
+        # print(f"  Successfully created issue for {req_id}. Status: {response.status_code}")
+        
         print(f"  [Mock API Call] Successfully prepared data for issue: {issue_title}") 
 
     except requests.exceptions.HTTPError as err:
@@ -91,7 +94,7 @@ def process_reqif_files():
 
     if not github_token or not repo_full_name:
         print("Error: GITHUB_TOKEN or GITHUB_REPOSITORY environment variables not set.")
-        # sys.exit(1) # Do not exit here to allow running in environments without tokens
+        # We don't exit here to allow local testing without the token
 
     reqif_files = glob.glob('**/*.reqif', recursive=True)
 
@@ -104,10 +107,10 @@ def process_reqif_files():
     for file_path in reqif_files:
         print(f"\n--- Processing file: {file_path} ---")
         try:
-            # Load the ReqIF file
-            reqif_data = ReqIf.open(file_path)
+            # Use ReqIFParser.parse() to load the file, which returns a ReqIFBundle
+            reqif_data = ReqIFParser.parse(file_path)
 
-            # Iterate over all SpecObjects (requirements/artifacts)
+            # The ReqIFBundle object has a 'spec_objects' list
             for spec_object in reqif_data.spec_objects:
                 # Use the robust finder to get the specific attributes
                 req_id = find_attribute_value(spec_object, REQIF_ATTRIBUTES['id'])
@@ -126,9 +129,8 @@ def process_reqif_files():
             # Continue to the next file if one fails
 
 if __name__ == "__main__":
-    # If a real GitHub Token is available, the create_or_update_github_issue function
-    # would execute the real API call.
     process_reqif_files()
+
 
 
 
