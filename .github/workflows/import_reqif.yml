@@ -1,4 +1,4 @@
-name: Import ReqIF Requirements
+name: Import System Requirements from ReqIF
 
 on:
   workflow_dispatch:
@@ -14,32 +14,31 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libxml2-dev libxslt-dev python3-dev git
+          python-version: '3.x'
 
       - name: Install Python dependencies
         run: |
           echo "# 1. Install required dependencies"
           pip install --upgrade pip setuptools wheel requests
 
-          echo "# 2. Clone and install StrictDoc from source (tag 0.0.49)"
-          git clone --branch 0.0.49 https://github.com/strictdoc-project/strictdoc.git
+          echo "# 2. Clone and install StrictDoc from source (latest)"
+          git clone https://github.com/strictdoc-project/strictdoc.git
           pip install -e ./strictdoc
 
           echo "# 3. Confirm StrictDoc installation"
           python - <<'PY'
           import pkgutil, strictdoc
           print("StrictDoc installed at:", strictdoc.__file__)
+          found = False
           for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
               if "reqif" in name:
                   print("  found:", name)
+                  found = True
+          if not found:
+              raise SystemExit("❌ ERROR: 'reqif' modules not found in StrictDoc!")
           PY
 
-      - name: Execute ReqIF import script
+      - name: Execute the script
         run: |
           echo "# 4. Execute the script"
           python .github/scripts/import_reqif_dynamic.py
