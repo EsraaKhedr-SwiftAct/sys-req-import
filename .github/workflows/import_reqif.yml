@@ -23,11 +23,11 @@ jobs:
 
       - name: Unpack local StrictDoc substitute
         run: |
-          echo "# 2. Unpack strictdoc_local.zip"
+          echo "# 2. Unpack strictdoc_local_fixed.zip"
           mkdir -p .github/scripts
-          unzip -o .github/scripts/strictdoc_local.zip -d .github/scripts/
+          unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
 
-          echo "Contents of strictdoc_local:"
+          echo "Contents of strictdoc_local (after extraction):"
           ls -R .github/scripts/strictdoc_local || true
 
       - name: Execute the script
