@@ -19,20 +19,19 @@ jobs:
       - name: Install Python dependencies
         run: |
           echo "# 1. Install required dependencies"
-          pip install --upgrade pip setuptools wheel requests
+          pip install --upgrade pip setuptools wheel requests lxml
 
-          echo "# 2. Clone and install StrictDoc from source (latest)"
-          git clone https://github.com/strictdoc-project/strictdoc.git
-          pip install -e ./strictdoc
+          echo "# 2. Install StrictDoc with ReqIF importer (v0.0.46)"
+          pip install --no-cache-dir git+https://github.com/strictdoc-project/strictdoc.git@1c589f6
 
-          echo "# 3. Confirm StrictDoc installation"
+          echo "# 3. Confirm StrictDoc reqif module exists"
           python - <<'PY'
           import pkgutil, strictdoc
           print("StrictDoc installed at:", strictdoc.__file__)
           found = False
           for name in pkgutil.walk_packages(strictdoc.__path__, strictdoc.__name__ + "."):
               if "reqif" in name:
-                  print("  found:", name)
+                  print("  ✅ found:", name)
                   found = True
           if not found:
               raise SystemExit("❌ ERROR: 'reqif' modules not found in StrictDoc!")

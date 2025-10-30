@@ -1,5 +1,20 @@
 import os
 import sys
+try:
+    from strictdoc.plugins.importers.reqif.importer import ReqIFImporter as ReqIFParser
+    print("✅ Using: strictdoc.plugins.importers.reqif.importer.ReqIFImporter")
+except ModuleNotFoundError:
+    try:
+        from strictdoc.backend.reqif.importer import ReqIFImporter as ReqIFParser
+        print("✅ Using: strictdoc.backend.reqif.importer.ReqIFImporter")
+    except ModuleNotFoundError:
+        try:
+            from strictdoc.export.reqif.sdoc_reqif_parser import SDocReqIFParser as ReqIFParser
+            print("✅ Using: strictdoc.export.reqif.sdoc_reqif_parser.SDocReqIFParser")
+        except ModuleNotFoundError:
+            print("❌ ERROR: No valid StrictDoc ReqIF parser module found!")
+            print("   Please pin to a compatible version (e.g. 0.0.46 or 0.0.49)")
+            sys.exit(1)
 import glob
 import requests
 import traceback # NEW: Import for detailed error logging
