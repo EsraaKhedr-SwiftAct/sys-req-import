@@ -1,5 +1,12 @@
-import sys, os
-sys.path.append(os.path.join(os.path.dirname(__file__), "strictdoc_local"))
+import sys
+import os
+
+scripts_dir = os.path.dirname(__file__)
+strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed")
+sys.path.insert(0, strictdoc_path)
+
+# Now you can import
+import strictdoc_local_fixed as strictdoc
 import glob
 import requests
 import traceback # NEW: Import for detailed error logging
