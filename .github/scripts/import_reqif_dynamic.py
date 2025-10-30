@@ -2,8 +2,8 @@ import os
 import sys
 import glob
 import requests
-# FIX: Correcting the import path to use the modern ReqIFParser class, which resolves the ModuleNotFoundError
-from reqif.reqif_parser import ReqIFParser
+# FIX: Correcting the import path to the common structure: from reqif.parser import ReqIFParser.
+from reqif.parser import ReqIFParser
 # Note: The object returned by ReqIFParser.parse() is a ReqIFBundle which contains .spec_objects
 
 # --- Configuration ---
@@ -130,6 +130,7 @@ def process_reqif_files():
 
 if __name__ == "__main__":
     process_reqif_files()
+
 
 
 
