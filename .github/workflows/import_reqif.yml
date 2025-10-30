@@ -25,4 +25,10 @@ jobs:
           pip install --upgrade pip setuptools wheel
           pip uninstall -y reqif || true
           pip install requests
-          # Install the
+          # Install the full StrictDoc repository (includes ReqIF parser)
+          pip install --no-cache-dir git+https://github.com/strictdoc-project/strictdoc.git@main
+
+      - name: Run ReqIF Import Script
+        run: |
+          echo "# 2. Execute the script"
+          python .github/scripts/import_reqif_dynamic.py
