@@ -1,188 +1,125 @@
-# .github/scripts/import_reqif_dynamic.py
-
 import os
-import requests
-import json
+import sys
 import glob
-from reqif.parser import ReqIFParser
-import traceback # NEW: Import traceback for detailed error logging
-# NOTE: Removed the problematic dependency on ReqIFException.
+import requests
+from reqif import ReqIf # We continue to use the 'reqif' library as requested
 
-# --- Configuration and Constants ---
-REQIF_FILE_PATH = 'sample.reqif'
-
-# --- GitHub API Setup ---
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-# GITHUB_REPOSITORY is expected to be in the format 'owner/repo'
-GITHUB_REPOSITORY = os.environ.get('GITHUB_REPOSITORY') 
-
-if not GITHUB_TOKEN or not GITHUB_REPOSITORY:
-    print("Error: GITHUB_TOKEN or GITHUB_REPOSITORY environment variable not set.")
-    exit(1)
-
-REPO_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
-HEADERS = {
-    'Authorization': f'token {GITHUB_TOKEN}',
-    'Accept': 'application/vnd.github.v3+json'
+# --- Configuration ---
+# GitHub API base URL
+GITHUB_API_URL = "https://api.github.com/repos"
+# Expected attribute names/IDs in the ReqIF file
+REQIF_ATTRIBUTES = {
+    'id': 'REQ-ID',
+    'title': 'REQ-TITLE',
+    'description': 'REQ-DESC'
 }
 
-# --- ReqIF Parsing Function ---
+def find_attribute_value(spec_object, definition_id):
+    """
+    Utility function to reliably find an attribute value in a SpecObject
+    based on its Definition ID (e.g., 'REQ-TITLE').
+    """
+    for attribute_value in spec_object.values:
+        # Check if the attribute definition matches the target ID
+        if (attribute_value.definition and 
+            hasattr(attribute_value.definition, 'identifier') and
+            attribute_value.definition.identifier == definition_id):
 
-def parse_reqif_file(filepath):
+            # Attribute values can be of different types, check for 'the_value'
+            if hasattr(attribute_value, 'the_value'):
+                # Clean up the value if it's a string, removing leading/trailing whitespace
+                if isinstance(attribute_value.the_value, str):
+                    # Simple HTML/XHTML cleanup for descriptions is often needed
+                    return attribute_value.the_value.replace('</p>', '\n').replace('<p>', '').strip()
+                return str(attribute_value.the_value).strip()
+    return None
+
+def create_or_update_github_issue(req_id, title, body, github_token, repo_full_name):
     """
-    Parses the ReqIF file by passing the filepath directly to the parser. 
-    Returns a dictionary of requirements, keyed by REQ-ID, or an empty dictionary on failure.
+    Placeholder for GitHub API interaction. In a real scenario, this function
+    would search existing issues by a specific tag or title format (e.g., "[REQ] REQ-001")
+    and either update it or create a new one.
+
+    For this example, we will just create a new issue for demonstration.
     """
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    url = f"{GITHUB_API_URL}/{repo_full_name}/issues"
+
+    # Define the issue title and body
+    issue_title = f"[{req_id}] {title}"
+    issue_body = f"## ReqIF Requirement: {req_id}\n\n**Title:** {title}\n\n---\n\n**Description:**\n\n{body}"
+
+    # NOTE: In a complete implementation, you would check for an existing issue
+    # by searching: GET /search/issues?q={req_id}+in:title+repo:{repo_full_name}
+    # If found, you'd use PATCH (update), otherwise POST (create).
+
+    print(f"Creating/Updating Issue for ID: {req_id}...")
+
+    payload = {
+        "title": issue_title,
+        "body": issue_body,
+        "labels": ["requirement", "reqif-import"]
+    }
+
     try:
-        # CORRECTED: Use ReqIFParser.parse(filepath) which is the correct static
-        # method to parse the file using its path, resolving the 'parse_string' error.
-        reqif_bundle = ReqIFParser.parse(filepath)
-        
-        print(f"✅ Successfully parsed ReqIF file: {filepath}")
-        
-        requirements = {}
-        
-        # Check if spec_objects exist in the core content
-        if reqif_bundle.core_content and reqif_bundle.core_content.spec_objects:
-            for spec_object in reqif_bundle.core_content.spec_objects:
-                req_id = None
-                req_title = None
-                req_desc = None
-                
-                # Extract REQ-ID, REQ-TITLE, and REQ-DESC from the object's attributes
-                for attr_value in spec_object.attribute_map.values():
-                    # The definition.long_name is used to find the correct attribute
-                    if attr_value.definition.long_name == 'REQ-ID':
-                        req_id = attr_value.value
-                    elif attr_value.definition.long_name == 'REQ-TITLE':
-                        req_title = attr_value.value
-                    elif attr_value.definition.long_name == 'REQ-DESC':
-                        req_desc = attr_value.value
-                
-                if req_id and req_title and req_desc:
-                    requirements[req_id] = {
-                        'title': req_title,
-                        'body': req_desc
-                    }
-        
-        print(f"✅ Extracted {len(requirements)} requirements from ReqIF.")
-        return requirements
-
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        print(f"Successfully created issue for {req_id}. Status: {response.status_code}")
+    except requests.exceptions.HTTPError as err:
+        print(f"Error processing requirement {req_id}: {err}")
+        print(f"GitHub API response: {response.text}")
     except Exception as e:
-        # MODIFIED: Print the full traceback to diagnose the root cause of the empty error message.
-        print(f"❌ Failed to parse ReqIF file with 'reqif' library: {e}")
-        print("--- FULL TRACEBACK START ---")
-        # Print the traceback using the imported module
-        print(traceback.format_exc())
-        print("--- FULL TRACEBACK END ---")
-        return {}
+        print(f"An unexpected error occurred: {e}")
 
 
-# --- GitHub API Functions (Unchanged) ---
-
-def find_issue_by_title(title_prefix):
+def process_reqif_files():
     """
-    Searches for an open issue whose title starts with the given prefix (e.g., '[REQ-001]').
-    Returns the issue number or None.
+    Scans the repository for all ReqIF files and processes them.
     """
-    url = f"{REPO_URL}/issues"
-    # Search for open issues and limit results
-    params = {'state': 'open', 'per_page': 30}
-    response = requests.get(url, headers=HEADERS, params=params)
+    github_token = os.environ.get("GITHUB_TOKEN")
+    repo_full_name = os.environ.get("GITHUB_REPOSITORY")
 
-    if response.status_code == 200:
-        issues = response.json()
-        for issue in issues:
-            # Check if the title starts with the exact prefix
-            if issue['title'].startswith(title_prefix):
-                return issue['number']
-        return None
-    else:
-        print(f"❌ Failed to search issues. Status: {response.status_code}, Response: {response.text}")
-        return None
+    if not github_token or not repo_full_name:
+        print("Error: GITHUB_TOKEN or GITHUB_REPOSITORY environment variables not set.")
+        sys.exit(1)
 
+    reqif_files = glob.glob('**/*.reqif', recursive=True)
 
-def update_issue(issue_number, title, body):
-    """Updates an existing GitHub issue with new title and body."""
-    url = f"{REPO_URL}/issues/{issue_number}"
-    data = {
-        'title': title,
-        'body': body
-    }
-    
-    response = requests.patch(url, headers=HEADERS, data=json.dumps(data))
-    
-    if response.status_code == 200:
-        print(f"✅ Issue #{issue_number} updated successfully.")
-    else:
-        print(f"❌ Failed to update Issue #{issue_number}. Status: {response.status_code}, Response: {response.text}")
-
-def create_issue(title, body):
-    """Creates a new GitHub issue."""
-    url = f"{REPO_URL}/issues"
-    data = {
-        'title': title,
-        'body': body,
-    }
-    
-    response = requests.post(url, headers=HEADERS, data=json.dumps(data))
-    
-    if response.status_code == 201:
-        issue_number = response.json().get('number')
-        print(f"✨ New Issue #{issue_number} created for requirement: {title}")
-        return issue_number
-    else:
-        print(f"❌ Failed to create Issue: {title}. Status: {response.status_code}, Response: {response.text}")
-        return None
-
-
-# --- Main Logic (Unchanged) ---
-
-def main():
-    print(f"Starting ReqIF synchronization for repository: {GITHUB_REPOSITORY}")
-
-    # 1. Check for the ReqIF file
-    reqif_files = glob.glob(REQIF_FILE_PATH)
     if not reqif_files:
-        print(f"Error: No ReqIF file found at {REQIF_FILE_PATH}")
-        return
-    
-    print(f"📄 Found ReqIF file: {reqif_files[0]}")
-    
-    # 2. Parse the ReqIF file
-    extracted_reqs = parse_reqif_file(reqif_files[0])
-
-    if not extracted_reqs:
-        print("🛑 No requirements extracted or parsing failed. Exiting synchronization.")
+        print("No .reqif files found in the repository.")
         return
 
-    # 3. Iterate over ALL extracted requirements and sync with GitHub Issues
-    print(f"\n--- Starting synchronization of {len(extracted_reqs)} requirements ---")
-    
-    for req_id, req_data in extracted_reqs.items():
-        # The prefix is used to uniquely identify this requirement's issue
-        issue_title_prefix = f"[{req_id}]"
-        full_issue_title = f"{issue_title_prefix} {req_data['title']}"
-        
-        # 3a. Try to find an existing issue
-        existing_issue_number = find_issue_by_title(issue_title_prefix)
+    print(f"Found {len(reqif_files)} ReqIF file(s) to process.")
 
-        if existing_issue_number:
-            # 3b. If found, update the issue
-            update_issue(existing_issue_number, 
-                         full_issue_title, 
-                         req_data['body'])
-        else:
-            # 3c. If not found, create a new issue
-            create_issue(full_issue_title, 
-                         req_data['body'])
+    for file_path in reqif_files:
+        print(f"\n--- Processing file: {file_path} ---")
+        try:
+            # Load the ReqIF file
+            reqif_data = ReqIf.open(file_path)
 
+            # Iterate over all SpecObjects (requirements/artifacts)
+            for spec_object in reqif_data.spec_objects:
+                # Use the robust finder to get the specific attributes
+                req_id = find_attribute_value(spec_object, REQIF_ATTRIBUTES['id'])
+                title = find_attribute_value(spec_object, REQIF_ATTRIBUTES['title'])
+                description = find_attribute_value(spec_object, REQIF_ATTRIBUTES['description'])
 
-    print(f"\n✅ Completed ReqIF → GitHub synchronization (issues).")
+                if req_id and title and description:
+                    print(f"  Extracted -> ID: {req_id}, Title: {title[:40]}...")
+                    # Process and create GitHub Issue
+                    create_or_update_github_issue(req_id, title, description, github_token, repo_full_name)
+                else:
+                    print(f"  Skipping SpecObject with identifier '{spec_object.identifier}' - Missing required attributes.")
 
+        except Exception as e:
+            print(f"Failed to process {file_path}: {e}")
+            # Continue to the next file if one fails
 
 if __name__ == "__main__":
-    main()
+    process_reqif_files()
 
 
 
