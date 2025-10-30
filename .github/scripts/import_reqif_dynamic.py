@@ -1,5 +1,10 @@
 import sys
 import os
+import glob           # <-- Add this line
+import requests
+import traceback
+import pkgutil
+
 
 # Directory of this script
 scripts_dir = os.path.dirname(__file__)
