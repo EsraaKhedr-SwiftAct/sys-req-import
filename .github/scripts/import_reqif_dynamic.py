@@ -193,13 +193,20 @@ def sync_reqif_to_github():
 
         # === Create/Update/Reopen ===
         for req_id, req in reqs.items():
+            new_title = f"[{req['id']}] {req['title']}"
+            new_body = format_req_body(req)
+
             if req_id in issue_map:
                 issue = issue_map[req_id]
-                if issue["state"] == "closed":
-                    print(f"🔄 Reopening closed issue for {req_id}")
+                # Only update if title or body changed
+                if issue["title"] != new_title or issue["body"] != new_body:
+                    if issue["state"] == "closed":
+                        print(f"🔄 Reopening and updating issue for {req_id}")
+                    else:
+                        print(f"♻️ Updating issue for {req_id}")
                     update_issue(repo_full_name, github_token, issue["number"], req)
                 else:
-                    update_issue(repo_full_name, github_token, issue["number"], req)
+                    print(f"✅ No changes detected for {req_id}, skipping update.")
             else:
                 create_issue(repo_full_name, github_token, req)
 
@@ -217,3 +224,4 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
