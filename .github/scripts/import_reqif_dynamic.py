@@ -37,6 +37,32 @@ except ImportError:
     sys.exit(1)
 
 print("✅ ReqIF importer loaded successfully.")
+# =====================================================
+# 🔹 Parse .reqif file into a dict keyed by requirement ID
+# =====================================================
+def parse_reqif_requirements():
+    """
+    Loads the first .reqif file found in the current directory,
+    parses it, and returns a dict keyed by requirement ID.
+    """
+    # Find .reqif file
+    reqif_files = glob.glob("*.reqif")
+    if not reqif_files:
+        print("❌ No .reqif file found in current directory.")
+        sys.exit(1)
+
+    reqif_file = reqif_files[0]
+    print(f"📄 Parsing ReqIF file: {reqif_file}")
+
+    importer = ReqIFParser(reqif_file)
+    req_list = importer.parse()
+
+    # Convert to dict keyed by 'id'
+    req_dict = {req['id']: req for req in req_list}
+
+    print(f"✅ Parsed {len(req_dict)} requirements.")
+    return req_dict
+
 
 # =====================================================
 # 🔧 GitHub setup
@@ -53,36 +79,6 @@ def github_headers(token):
 # =====================================================
 # 🔹 Helper: format requirement body
 # =====================================================
-def format_req_body(req):
-    """
-    Format requirement for GitHub issue body in Markdown:
-      - Requirement ID
-      - Main description
-      - All attributes found in description
-    """
-    lines = [f"**Requirement ID:** {req['id']}", ""]
-    description = req.get('description', '(No description found)')
-
-    desc_lines = []
-    extra_lines = []
-
-    for line in description.splitlines():
-        line = line.strip()
-        # If line contains ":" but is not the main description, treat as attribute
-        if ":" in line and not line.lower().startswith("description"):
-            extra_lines.append(line)
-        else:
-            desc_lines.append(line)
-
-    lines.append("**Description:**")
-    lines.extend(desc_lines if desc_lines else ["(No description found)"])
-
-    if extra_lines:
-        lines.append("")
-        lines.append("**Attributes:**")
-        lines.extend(extra_lines)
-
-    return "\n".join(lines)
 
 def format_req_body(req):
     """
