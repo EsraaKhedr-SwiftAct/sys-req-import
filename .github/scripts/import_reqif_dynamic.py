@@ -84,33 +84,28 @@ def format_req_body(req):
 
     return "\n".join(lines)
 
-# =====================================================
-# 📦 Parse all .reqif requirements
-# =====================================================
-def parse_reqif_requirements():
-    """Parse all .reqif files in repo and return {id: {id, title, description}}"""
-    reqif_files = glob.glob("**/*.reqif", recursive=True)
-    all_reqs = {}
+def format_req_body(req):
+    """
+    Format requirement for GitHub issue body in Markdown:
+      - Requirement ID
+      - Main description
+      - All attributes dynamically
+    """
+    lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
+    description = req.get('description', '(No description found)')
 
-    if not reqif_files:
-        print("⚠️ No .reqif files found.")
-        return all_reqs
+    lines.append("**Description:**")
+    lines.append(description if description else "(No description found)")
 
-    for file_path in reqif_files:
-        print(f"📂 Parsing {file_path}")
-        try:
-            parser = ReqIFParser(file_path)
-            parsed = parser.parse()  # Expect list of dicts with id/title/description
-            for req in parsed:
-                req_id = req.get("id")
-                if req_id:
-                    all_reqs[req_id] = req
-        except Exception as e:
-            print(f"❌ Error parsing {file_path}: {e}")
-            traceback.print_exc()
+    # Collect all attributes except id, title, description
+    attrs = {k: v for k, v in req.items() if k not in ["id", "title", "description"]}
+    if attrs:
+        lines.append("")
+        lines.append("**Attributes:**")
+        for k, v in attrs.items():
+            lines.append(f"{k}: {v}")
 
-    print(f"✅ Parsed total {len(all_reqs)} requirements.")
-    return all_reqs
+    return "\n".join(lines)
 
 # =====================================================
 # 🧭 GitHub issue management
