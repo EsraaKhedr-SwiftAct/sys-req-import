@@ -58,18 +58,18 @@ def format_req_body(req):
     Format requirement for GitHub issue body in Markdown:
       - Requirement ID
       - Main description
-      - Enum / other attributes
+      - All attributes found in description
     """
     lines = [f"**Requirement ID:** {req['id']}", ""]
     description = req.get('description', '(No description found)')
 
-    # Split description into main description and Enum/other if present
     desc_lines = []
     extra_lines = []
 
     for line in description.splitlines():
         line = line.strip()
-        if line.startswith("Enum:") or any(k in line for k in [": BOOLEAN", ": INTEGER", ": REAL", ": DATE"]):
+        # If line contains ":" but is not the main description, treat as attribute
+        if ":" in line and not line.lower().startswith("description"):
             extra_lines.append(line)
         else:
             desc_lines.append(line)
