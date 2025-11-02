@@ -50,6 +50,39 @@ def github_headers(token):
         "Accept": "application/vnd.github+json",
     }
 
+# =====================================================
+# 🔹 Helper: format requirement body
+# =====================================================
+def format_req_body(req):
+    """
+    Format requirement for GitHub issue body in Markdown:
+      - Requirement ID
+      - Main description
+      - Enum / other attributes
+    """
+    lines = [f"**Requirement ID:** {req['id']}", ""]
+    description = req.get('description', '(No description found)')
+
+    # Split description into main description and Enum/other if present
+    desc_lines = []
+    extra_lines = []
+
+    for line in description.splitlines():
+        line = line.strip()
+        if line.startswith("Enum:") or any(k in line for k in [": BOOLEAN", ": INTEGER", ": REAL", ": DATE"]):
+            extra_lines.append(line)
+        else:
+            desc_lines.append(line)
+
+    lines.append("**Description:**")
+    lines.extend(desc_lines if desc_lines else ["(No description found)"])
+
+    if extra_lines:
+        lines.append("")
+        lines.append("**Attributes:**")
+        lines.extend(extra_lines)
+
+    return "\n".join(lines)
 
 # =====================================================
 # 📦 Parse all .reqif requirements
@@ -79,7 +112,6 @@ def parse_reqif_requirements():
     print(f"✅ Parsed total {len(all_reqs)} requirements.")
     return all_reqs
 
-
 # =====================================================
 # 🧭 GitHub issue management
 # =====================================================
@@ -100,7 +132,7 @@ def get_existing_issues(repo, token):
 def create_issue(repo, token, req):
     data = {
         "title": f"[{req['id']}] {req['title']}",
-        "body": f"**Requirement ID:** {req['id']}\n\n**Description:**\n{req['description']}",
+        "body": format_req_body(req),
         "labels": ["requirement", "reqif-import"],
     }
     url = f"{GITHUB_API_URL}/{repo}/issues"
@@ -116,7 +148,7 @@ def update_issue(repo, token, issue_number, req):
     url = f"{GITHUB_API_URL}/{repo}/issues/{issue_number}"
     data = {
         "title": f"[{req['id']}] {req['title']}",
-        "body": f"**Requirement ID:** {req['id']}\n\n**Description:**\n{req['description']}",
+        "body": format_req_body(req),
         "state": "open",
     }
     resp = requests.patch(url, headers=github_headers(token), json=data)
@@ -135,7 +167,6 @@ def close_issue(repo, token, issue_number, req_id):
         print(f"❌ Failed to close issue #{issue_number}: {resp.text}")
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
-
 
 # =====================================================
 # 🔁 Main synchronization
