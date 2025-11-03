@@ -13,7 +13,7 @@ Expected environment variables:
   - GITHUB_TOKEN: GitHub PAT or Actions token.
   - GITHUB_REPOSITORY: "owner/repo" format.
 
-Compatible with the `reqif_importer` (StrictDoc-based) local library.
+Uses StrictDoc-based local or installed ReqIF parser.
 """
 
 import os
@@ -23,23 +23,26 @@ import traceback
 import requests
 
 # =====================================================
-# 🧱 Load local reqif_importer (StrictDoc-based)
+# 🧱 Load StrictDoc ReqIF parser
 # =====================================================
 scripts_dir = os.path.dirname(__file__)
-strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed")
-if os.path.isdir(strictdoc_path):
-    sys.path.insert(0, strictdoc_path)
+local_reqif_path = os.path.join(scripts_dir, "strictdoc_local_fixed")  # optional local copy
+if os.path.isdir(local_reqif_path):
+    sys.path.insert(0, local_reqif_path)
 
 try:
-    from reqif_importer import ReqIFImporter as ReqIFParser
+    from reqif import ReqIFParser
 except ImportError:
-    print("❌ Could not import reqif_importer. Please ensure 'strictdoc_local_fixed' exists.")
+    print("❌ Could not import StrictDoc ReqIF parser. Ensure 'reqif' folder exists or is installed.")
     sys.exit(1)
 
-print("✅ ReqIF importer loaded successfully.")
+ReqIFParser = ReqIFParser  # alias
+
+print("✅ ReqIF parser loaded successfully.")
+
 
 # =====================================================
-# 🔹 Parse .reqif file into a dict keyed by requirement ID
+# 🔹 Parse .reqif files into dictionary keyed by requirement ID
 # =====================================================
 def parse_reqif_requirements():
     reqif_files = glob.glob("*.reqif")
@@ -71,13 +74,11 @@ def github_headers(token):
 
 
 # =====================================================
-# 🆕 Helper: choose smart title
+# 🆕 Choose a smart title
 # =====================================================
 def choose_title(req):
     """
-    Choose best title:
-    - Use `title` if it’s not identical to ID
-    - Fallback to first descriptive sentence in description
+    Prefer the 'title' attribute if meaningful; fallback to first descriptive sentence.
     """
     req_id = str(req.get('id', '')).strip()
     title = (req.get('title') or '').strip()
@@ -89,81 +90,39 @@ def choose_title(req):
     if desc:
         for line in desc.splitlines():
             clean = line.strip()
-            if not clean:
-                continue
-            if clean.upper() == req_id.upper():
-                continue
-            if any(clean.lower().startswith(p) for p in (
-                "enum", "status", "priority", "verification", "binding", "mandatory", "optional"
-            )):
-                continue
-            if len(clean.split()) >= 3:
+            if clean and clean.upper() != req_id.upper() and len(clean.split()) >= 3:
                 return clean
 
     return title or req_id
 
 
 # =====================================================
-# 🔹 Helper: format requirement body (Polarion-style)
+# 🔹 Format requirement body for GitHub issue
 # =====================================================
 def format_req_body(req):
     """
-    Format requirement for GitHub issue body in Markdown.
-    Matches Polarion/DOORS/Jama structure:
-      **Requirement ID:** R001
-      **Description:**
-      The system shall capture images ...
-      **Attributes:**
-      Status: Proposed
-      Priority: High
-      Binding Force: Mandatory
+    Format requirement into Markdown for GitHub issues.
+    Includes Requirement ID, Description, and all attributes.
     """
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
 
-    # --- Description (pure descriptive text only) ---
+    # --- Description ---
     description = (req.get("description") or "").strip()
-    desc_lines = []
-    for line in description.splitlines():
-        clean = line.strip()
-        if not clean:
-            continue
-        if any(clean.lower().startswith(prefix) for prefix in [
-            "enum", "status", "priority", "binding", "verification", "mandatory", "optional"
-        ]):
-            continue
-        if len(clean.split()) <= 2 and clean.upper().startswith("R"):
-            continue
-        desc_lines.append(clean)
+    desc_lines = [line.strip() for line in description.splitlines() if line.strip()]
     description = "\n".join(desc_lines)
-
     lines.append("**Description:**")
     lines.append(description if description else "(No description found)")
     lines.append("")
 
     # --- Attributes ---
-    attrs = {
-        k: v for k, v in req.items()
-        if k.lower() not in ["id", "title", "description"]
-    }
-
+    attrs = {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
     if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
-            key = (
-                k.replace("_", " ")
-                .replace("Def", "")
-                .title()
-                .replace("Bindingforce", "Binding Force")
-                .replace("Verification", "Verification")
-            )
+            key = k.replace("_", " ").replace("Def", "").title()
             val = str(v).strip()
-            val = (
-                val.replace("STATUS_", "")
-                .replace("ENUM:", "")
-                .replace("_", " ")
-                .strip()
-                .capitalize()
-            )
+            if isinstance(v, str) and v.upper().startswith("ENUM:"):
+                val = v.split(":", 1)[-1].replace("_", " ").capitalize()
             lines.append(f"{key}: {val}")
 
     return "\n".join(lines)
@@ -280,3 +239,4 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
