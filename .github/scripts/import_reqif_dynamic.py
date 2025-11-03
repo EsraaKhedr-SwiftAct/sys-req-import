@@ -21,9 +21,7 @@ def parse_reqif_requirements():
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
     parser = ReqIFParser(reqif_file)
-    parser.parse()  # Parses all supported dialects
-
-    req_list = parser.get_all_requirements()  # Returns list of ReqIFRequirement objects
+    req_list = parser.parse()  # Returns list of ReqIFRequirement objects
 
     req_dict = {}
     for i, req in enumerate(req_list):
@@ -164,6 +162,7 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
 
 
 
