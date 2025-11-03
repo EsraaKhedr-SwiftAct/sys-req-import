@@ -38,15 +38,10 @@ except ImportError:
 
 print("✅ ReqIF importer loaded successfully.")
 
-
 # =====================================================
 # 🔹 Parse .reqif file into a dict keyed by requirement ID
 # =====================================================
 def parse_reqif_requirements():
-    """
-    Loads the first .reqif file found in the current directory,
-    parses it, and returns a dict keyed by requirement ID.
-    """
     reqif_files = glob.glob("*.reqif")
     if not reqif_files:
         print("❌ No .reqif file found in current directory.")
@@ -59,7 +54,6 @@ def parse_reqif_requirements():
     req_list = importer.parse()
 
     req_dict = {req['id']: req for req in req_list}
-
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
 
@@ -68,7 +62,6 @@ def parse_reqif_requirements():
 # 🔧 GitHub setup
 # =====================================================
 GITHUB_API_URL = "https://api.github.com/repos"
-
 
 def github_headers(token):
     return {
@@ -82,93 +75,96 @@ def github_headers(token):
 # =====================================================
 def choose_title(req):
     """
-    Return the best title for a requirement:
-      - prefer req['title'] if it is not just the ID
-      - otherwise, use the first meaningful line from description
+    Choose best title:
+    - Use `title` if it’s not identical to ID
+    - Fallback to first descriptive sentence in description
     """
     req_id = str(req.get('id', '')).strip()
     title = (req.get('title') or '').strip()
 
-    # Use title if it's not identical to ID and is meaningful
     if title and title != req_id and len(title) > len(req_id):
         return title
 
-    # Try extracting descriptive line from description
     desc = (req.get('description') or '').strip()
     if desc:
         for line in desc.splitlines():
-            line = line.strip()
-            if not line:
+            clean = line.strip()
+            if not clean:
                 continue
-            # Skip lines that look like IDs or attributes
-            if line.upper() == req_id.upper():
+            if clean.upper() == req_id.upper():
                 continue
-            if any(line.lower().startswith(p) for p in ("enum", "status", "priority", "verification", "binding", "mandatory", "optional")):
+            if any(clean.lower().startswith(p) for p in (
+                "enum", "status", "priority", "verification", "binding", "mandatory", "optional"
+            )):
                 continue
-            # Return first descriptive line
-            if len(line.split()) >= 3:
-                return line
+            if len(clean.split()) >= 3:
+                return clean
 
     return title or req_id
 
 
 # =====================================================
-# 🔹 Helper: format requirement body (universal & clean)
+# 🔹 Helper: format requirement body (Polarion-style)
 # =====================================================
 def format_req_body(req):
     """
-    Format requirement for GitHub issue body in Markdown:
-      - Requirement ID
-      - Title
-      - Description (only pure descriptive text)
-      - Attributes (all remaining key-value pairs)
-    Works generically with ReqIF files from Polarion, DOORS, Jama, PTC, etc.
+    Format requirement for GitHub issue body in Markdown.
+    Matches Polarion/DOORS/Jama structure:
+      **Requirement ID:** R001
+      **Description:**
+      The system shall capture images ...
+      **Attributes:**
+      Status: Proposed
+      Priority: High
+      Binding Force: Mandatory
     """
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
 
-    # --- Title ---
-    title = req.get("title", "").strip()
-    if title:
-        lines.append("**Title:**")
-        lines.append(title)
-        lines.append("")
-
-    # --- Description (clean only the real description text) ---
-    description = req.get("description", "").strip()
-    if description:
-        desc_lines = []
-        for line in description.splitlines():
-            clean = line.strip()
-            if not clean:
-                continue
-            if any(clean.lower().startswith(prefix) for prefix in ["enum", "status", "priority", "mandatory", "high", "low"]):
-                continue
-            if len(clean.split()) <= 2 and clean.upper().startswith("R"):  # e.g., "R001"
-                continue
-            desc_lines.append(clean)
-        description = "\n".join(desc_lines)
+    # --- Description (pure descriptive text only) ---
+    description = (req.get("description") or "").strip()
+    desc_lines = []
+    for line in description.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        if any(clean.lower().startswith(prefix) for prefix in [
+            "enum", "status", "priority", "binding", "verification", "mandatory", "optional"
+        ]):
+            continue
+        if len(clean.split()) <= 2 and clean.upper().startswith("R"):
+            continue
+        desc_lines.append(clean)
+    description = "\n".join(desc_lines)
 
     lines.append("**Description:**")
     lines.append(description if description else "(No description found)")
     lines.append("")
 
-    # --- Attributes (everything except ID, title, and description) ---
-    attrs = {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
+    # --- Attributes ---
+    attrs = {
+        k: v for k, v in req.items()
+        if k.lower() not in ["id", "title", "description"]
+    }
+
     if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
-            clean_key = k.replace("_", " ").title()
-            clean_val = str(v)
-            if isinstance(clean_val, str):
-                clean_val = (
-                    clean_val
-                    .replace("STATUS_", "")
-                    .replace("ENUM:", "")
-                    .replace("_", " ")
-                    .strip()
-                    .capitalize()
-                )
-            lines.append(f"{clean_key}: {clean_val}")
+            key = (
+                k.replace("_", " ")
+                .replace("Def", "")
+                .title()
+                .replace("Bindingforce", "Binding Force")
+                .replace("Verification", "Verification")
+            )
+            val = str(v).strip()
+            val = (
+                val.replace("STATUS_", "")
+                .replace("ENUM:", "")
+                .replace("_", " ")
+                .strip()
+                .capitalize()
+            )
+            lines.append(f"{key}: {val}")
 
     return "\n".join(lines)
 
@@ -284,6 +280,3 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
-
-
-
