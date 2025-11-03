@@ -4,9 +4,10 @@ import sys
 import glob
 import traceback
 import requests
+import html
 
-# Use full-featured universal ReqIF parser
-from reqif_parser_full import ReqIFParser  # New universal parser for EA/Polarion/DOORS/Jama
+# Universal ReqIF parser
+from reqif_parser_full import ReqIFParser  # Must handle EA/Polarion/DOORS/Jama
 
 # -------------------------
 # Parse .reqif files
@@ -25,12 +26,21 @@ def parse_reqif_requirements():
 
     req_dict = {}
     for i, req in enumerate(req_list):
-        req_id = getattr(req, "identifier", None) or getattr(req, "id", None) or f"REQ-{i+1}"
+        # Generic dynamic attribute detection
+        attributes = getattr(req, "attributes", {})
+        req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
+        title = getattr(req, "title", None) or attributes.get("Title") or req_id
+        description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
+
+        # Unescape XHTML if needed
+        description = html.unescape(description)
+        title = html.unescape(title)
+
         req_dict[req_id] = {
             "id": req_id,
-            "title": getattr(req, "title", "") or "",
-            "description": getattr(req, "description", "") or "",
-            "attributes": getattr(req, "attributes", {}) or {}
+            "title": title,
+            "description": description,
+            "attributes": attributes
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
@@ -59,14 +69,14 @@ def choose_title(req):
 def format_req_body(req):
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
     
-    # Handle description safely
+    # Description
     description = (req.get("description") or "").strip()
     desc_lines = [line.strip() for line in description.splitlines() if line.strip()]
     lines.append("**Description:**")
     lines.append("\n".join(desc_lines) if desc_lines else "(No description found)")
     lines.append("")
 
-    # Handle attributes safely
+    # Attributes
     attrs = req.get("attributes", {})
     if attrs:
         lines.append("**Attributes:**")
@@ -137,12 +147,14 @@ def sync_reqif_to_github():
     try:
         reqs = parse_reqif_requirements()
         issues = get_existing_issues(repo_full_name, github_token)
+
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
             if title.startswith("[") and "]" in title:
                 req_id = title.split("]")[0][1:]
                 issue_map[req_id] = issue
+
         # Create or update issues
         for req_id, req in reqs.items():
             if req_id in issue_map:
@@ -151,10 +163,12 @@ def sync_reqif_to_github():
                     update_issue(repo_full_name, github_token, issue["number"], req)
             else:
                 create_issue(repo_full_name, github_token, req)
+
         # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
+
         print("✅ Synchronization complete.")
     except Exception:
         print("❌ Unexpected error during synchronization.")
