@@ -2,112 +2,93 @@
 """
 reqif_parser_full.py
 
-Universal ReqIF parser supporting EA, Polarion, DOORS, Jama, PTC.
-Features:
-- Handles attributes: string, XHTML, enumeration
-- Handles optional/mandatory fields
-- Preserves hierarchy (parent-child)
-- Returns list of ReqIFRequirement objects
+Universal ReqIF parser supporting EA, Polarion, DOORS, Jama dialects.
+Compatible with Python 3.8+ and GitHub Actions environment.
 """
 
 import xml.etree.ElementTree as ET
 
 class ReqIFRequirement:
-    def __init__(self, identifier, title="", description="", attributes=None, children=None):
+    """Represents a single ReqIF requirement."""
+    def __init__(self, identifier, title="", description="", attributes=None):
         self.id = identifier
-        self.identifier = identifier
         self.title = title
         self.description = description
-        self.attributes = attributes or {}
-        self.children = children or []
-
-    def __repr__(self):
-        return f"<ReqIFRequirement {self.id}: {self.title[:30]}>"
+        self.attributes = attributes if attributes else {}
 
 class ReqIFParser:
-    def __init__(self, reqif_file):
-        self.file = reqif_file
-        self.ns = {
-            "reqif": "http://www.omg.org/spec/ReqIF/20110401/reqif.xsd",
-            "xhtml": "http://www.w3.org/1999/xhtml"
-        }
-        self.spec_objects = {}
-        self.child_map = {}  # child_id -> parent_id(s)
+    """Universal parser for .reqif files."""
+    
+    REQIF_NS = {
+        "reqif": "http://www.omg.org/spec/ReqIF/20110401/reqif.xsd",
+        "xhtml": "http://www.w3.org/1999/xhtml"
+    }
 
+    def __init__(self, filename):
+        self.filename = filename
+        self.ns = self.REQIF_NS
+        self.tree = ET.parse(filename)
+        self.root = self.tree.getroot()
+    
     def parse(self):
-        tree = ET.parse(self.file)
-        root = tree.getroot()
+        """Parses all requirements in the ReqIF file."""
+        reqs = []
+        for spec_obj in self.root.findall(".//reqif:SPEC-OBJECT", self.ns):
+            identifier = self._get_attribute_value_by_ref(spec_obj, "ID_DEF") or "UNKNOWN"
+            title = self._get_attribute_value_by_ref(spec_obj, "TITLE_DEF") or ""
+            description = self._get_attribute_value_by_ref(spec_obj, "DESC_DEF") or ""
+            attributes = self._collect_attributes(spec_obj)
+            reqs.append(ReqIFRequirement(identifier, title, description, attributes))
+        return reqs
+    
+    def _get_attribute_value_by_ref(self, spec_obj, ref_name):
+        """Return THE-VALUE text for a given attribute definition reference"""
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-STRING", self.ns):
+            def_ref = attr.find("reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-STRING-REF", self.ns)
+            if def_ref is not None and def_ref.text == ref_name:
+                val = attr.find("reqif:THE-VALUE", self.ns)
+                return val.text.strip() if val is not None and val.text else ""
+        return ""
+    
+    def _collect_attributes(self, spec_obj):
+        """Collect all attributes of the requirement into a dict"""
+        attrs = {}
+        # ATTRIBUTE-VALUE-STRING
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-STRING", self.ns):
+            key = self._get_def_name(attr)
+            val_elem = attr.find("reqif:THE-VALUE", self.ns)
+            val = val_elem.text.strip() if val_elem is not None and val_elem.text else ""
+            if key:
+                attrs[key] = val
+        # ATTRIBUTE-VALUE-INTEGER
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-INTEGER", self.ns):
+            key = self._get_def_name(attr)
+            val_elem = attr.find("reqif:THE-VALUE", self.ns)
+            val = int(val_elem.text) if val_elem is not None and val_elem.text else 0
+            if key:
+                attrs[key] = val
+        # ATTRIBUTE-VALUE-BOOLEAN
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-BOOLEAN", self.ns):
+            key = self._get_def_name(attr)
+            val_elem = attr.find("reqif:THE-VALUE", self.ns)
+            val = (val_elem.text.lower() == "true") if val_elem is not None and val_elem.text else False
+            if key:
+                attrs[key] = val
+        # ATTRIBUTE-VALUE-DATE
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-DATE", self.ns):
+            key = self._get_def_name(attr)
+            val_elem = attr.find("reqif:THE-VALUE", self.ns)
+            val = val_elem.text.strip() if val_elem is not None and val_elem.text else ""
+            if key:
+                attrs[key] = val
+        return attrs
+    
+    def _get_def_name(self, attr_element):
+        """Get the attribute's human-readable name"""
+        def_elem = attr_element.find("reqif:DEFINITION", self.ns)
+        if def_elem is not None:
+            name_elem = def_elem.find("reqif:LONG-NAME", self.ns)
+            if name_elem is not None and name_elem.text:
+                return name_elem.text.strip()
+        return None
 
-        # -------------------------
-        # Step 1: Parse SPEC-OBJECTS
-        # -------------------------
-        for so in root.findall(".//reqif:SPEC-OBJECT", self.ns):
-            identifier = self._get_first_text(so, ".//reqif:ATTRIBUTE-VALUE-STRING[reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-STRING-REF='ID_DEF']/reqif:THE-VALUE") or "UNKNOWN"
-            title = self._get_first_text(so, ".//reqif:ATTRIBUTE-VALUE-STRING[reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-STRING-REF='TITLE_DEF']/reqif:THE-VALUE") or ""
-            description = self._get_xhtml_text(so, ".//reqif:ATTRIBUTE-VALUE-XHTML/reqif:THE-VALUE/xhtml:div") or ""
-
-            # Other attributes
-            attrs = {}
-            # String attributes
-            for attr in so.findall(".//reqif:ATTRIBUTE-VALUE-STRING", self.ns):
-                key = self._get_def_ref(attr)
-                val = self._get_text(attr)
-                if key:
-                    attrs[key] = val
-            # Enumeration attributes
-            for attr in so.findall(".//reqif:ATTRIBUTE-VALUE-ENUMERATION", self.ns):
-                key = self._get_def_ref(attr)
-                values = [v.text.strip() for v in attr.findall(".//reqif:ENUM-VALUE-REF", self.ns) if v.text]
-                if key:
-                    attrs[key] = values if len(values) > 1 else (values[0] if values else "")
-
-            self.spec_objects[identifier] = ReqIFRequirement(identifier, title, description, attrs)
-
-        # -------------------------
-        # Step 2: Parse hierarchy
-        # -------------------------
-        for parent in root.findall(".//reqif:SPEC-HIERARCHY", self.ns):
-            for child_ref in parent.findall(".//reqif:CHILD-OBJECT-REF", self.ns):
-                child_id = child_ref.text.strip()
-                parent_elem = parent.find("../reqif:SPEC-HIERARCHY-ROOT", self.ns)
-                if parent_elem is not None:
-                    # The parent of the child
-                    parent_refs = parent_elem.findall(".//reqif:CHILD-OBJECT-REF", self.ns)
-                    for p in parent_refs:
-                        pid = p.text.strip()
-                        if pid != child_id:
-                            self.child_map[child_id] = pid
-
-        # -------------------------
-        # Step 3: Link hierarchy
-        # -------------------------
-        for child_id, parent_id in self.child_map.items():
-            child_req = self.spec_objects.get(child_id)
-            parent_req = self.spec_objects.get(parent_id)
-            if child_req and parent_req:
-                parent_req.children.append(child_req)
-
-        # Return top-level requirements (not children of anyone)
-        top_level = [req for req_id, req in self.spec_objects.items() if req_id not in self.child_map]
-        return top_level
-
-    # -------------------------
-    # Helpers
-    # -------------------------
-    def _get_def_ref(self, attr_elem):
-        """Get the attribute definition reference"""
-        def_ref = attr_elem.find(".//reqif:DEFINITION/*", self.ns)
-        return def_ref.text.strip() if def_ref is not None else None
-
-    def _get_text(self, elem):
-        """Get THE-VALUE text of an element"""
-        val = elem.find("reqif:THE-VALUE", self.ns)
-        return val.text.strip() if val is not None and val.text else ""
-
-    def _get_first_text(self, parent, xpath):
-        elem = parent.find(xpath, self.ns)
-        return elem.text.strip() if elem is not None and elem.text else ""
-
-    def _get_xhtml_text(self, parent, xpath):
-        elem = parent.find(xpath, self.ns)
-        return ET.tostring(elem, encoding="unicode", method="html") if elem is not None else ""
