@@ -27,20 +27,35 @@ def parse_reqif_requirements():
     req_dict = {}
     for i, req in enumerate(req_list):
         # Generic dynamic attribute detection
-        attributes = getattr(req, "attributes", {})
+        attributes = getattr(req, "attributes", {}) or {}
         req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
         title = getattr(req, "title", None) or attributes.get("Title") or req_id
         description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
+
+        # Fallbacks for malformed or empty fields
+        if not req_id.strip():
+            req_id = f"REQ-{i+1}"
+        if not title.strip():
+            title = req_id
+        if not description.strip():
+            description = "(No description found)"
 
         # Unescape XHTML if needed
         description = html.unescape(description)
         title = html.unescape(title)
 
+        # Normalize attributes: ensure strings, fallback if None
+        normalized_attrs = {}
+        for k, v in attributes.items():
+            key = str(k).strip() if k else "Unknown"
+            val = str(v).strip() if v is not None else "(No value)"
+            normalized_attrs[key] = val
+
         req_dict[req_id] = {
             "id": req_id,
             "title": title,
             "description": description,
-            "attributes": attributes
+            "attributes": normalized_attrs
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
@@ -68,7 +83,7 @@ def choose_title(req):
 
 def format_req_body(req):
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
-    
+
     # Description
     description = (req.get("description") or "").strip()
     desc_lines = [line.strip() for line in description.splitlines() if line.strip()]
@@ -148,6 +163,7 @@ def sync_reqif_to_github():
         reqs = parse_reqif_requirements()
         issues = get_existing_issues(repo_full_name, github_token)
 
+        # Map existing issues by ReqIF ID
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
@@ -176,3 +192,4 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
