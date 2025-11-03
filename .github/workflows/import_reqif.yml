@@ -28,10 +28,10 @@ jobs:
       - name: Unpack local StrictDoc substitute
         run: |
           echo "# 2. Unpack strictdoc_local_fixed.zip"
-          mkdir -p .github/scripts
+          mkdir -p .github/scripts/strictdoc_local_fixed
           unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
-          echo "Contents of strictdoc_local_fixed (after extraction):"
-          ls -R .github/scripts/strictdoc_local_fixed || true
+          echo "🔍 Listing contents after unzip:"
+          find .github/scripts/strictdoc_local_fixed -type f
 
       - name: Execute the import script
         env:
@@ -39,7 +39,9 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "# 3. Execute the import script using local parser"
-          # Add parent folder to PYTHONPATH so Python can find 'strictdoc_local_fixed'
-          export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
+          export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
+          echo "📂 PYTHONPATH is now: $PYTHONPATH"
+          echo "🔍 Files in PYTHONPATH directory:"
+          find $PWD/.github/scripts/strictdoc_local_fixed -type f
+          echo "📄 Running import_reqif_dynamic.py..."
           python .github/scripts/import_reqif_dynamic.py
-  
