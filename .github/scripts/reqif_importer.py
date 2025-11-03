@@ -1,118 +1,116 @@
 #!/usr/bin/env python3
 """
-reqif_importer.py
-
-Universal ReqIF parser (pure Python, no external ReqIF library required).
-Fully compatible with tools like DOORS, Polarion, Jama, EA, PTC, etc.
-Mimics 'reqif' library output.
-
-Usage:
-    from reqif_importer import ReqIFImporter
-
-    importer = ReqIFImporter("sample.reqif")
-    reqs = importer.parse()  # List of ReqIFRequirement
+Full-featured ReqIF parser supporting EA, Polarion, DOORS, and Jama exports.
+Handles XHTML, plain text, ENUMs, optional attributes, and nested hierarchy.
 """
 
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 
+REQIF_NS = {
+    'reqif': 'http://www.omg.org/spec/ReqIF/20110401/reqif.xsd',
+    'xhtml': 'http://www.w3.org/1999/xhtml'
+}
+
 class ReqIFRequirement:
-    def __init__(self, identifier, title, description, attributes=None, parent_id=None):
+    def __init__(self, identifier):
         self.identifier = identifier
-        self.title = title
-        self.description = description
-        self.attributes = attributes or {}
-        self.parent_id = parent_id
+        self.title = None
+        self.description = None
+        self.status = None
+        self.priority = None
+        self.binding = None
+        self.verification = None
+        self.children = []
 
     def __repr__(self):
         return f"<ReqIFRequirement id={self.identifier} title={self.title}>"
 
-class ReqIFBundle:
-    def __init__(self):
-        self.requirements = []
-
-class ReqIFImporter:
-    def __init__(self, file_path):
-        self.file_path = file_path
+class ReqIFParser:
+    def __init__(self, filename):
+        self.filename = filename
+        self.requirements = {}
+        self.roots = []
 
     def parse(self):
-        tree = ET.parse(self.file_path)
+        tree = ET.parse(self.filename)
         root = tree.getroot()
+        content = root.find('reqif:CORE-CONTENT/reqif:REQ-IF-CONTENT', REQIF_NS)
 
-        # Namespace handling
-        ns = self._get_namespaces(root)
+        # Parse all SPEC-OBJECTS
+        for obj in content.findall('reqif:SPEC-OBJECTS/reqif:SPEC-OBJECT', REQIF_NS):
+            req = self._parse_spec_object(obj)
+            self.requirements[req.identifier] = req
 
-        # Build attribute definitions mapping
-        attr_defs = self._parse_attribute_definitions(root, ns)
+        # Build hierarchy
+        hierarchy_root = content.find('reqif:SPEC-HIERARCHY/reqif:SPEC-HIERARCHY-ROOT', REQIF_NS)
+        if hierarchy_root is not None:
+            self._parse_hierarchy(hierarchy_root, None)
 
-        # Build requirements dictionary
-        req_dict = self._parse_spec_objects(root, ns, attr_defs)
+    def _parse_spec_object(self, obj):
+        identifier = self._get_attribute(obj, 'ID_DEF') or obj.get('IDENTIFIER')
+        req = ReqIFRequirement(identifier)
+        req.title = self._get_attribute(obj, 'TITLE_DEF')
+        req.description = self._get_attribute(obj, 'DESC_DEF', allow_xhtml=True)
+        req.status = self._get_attribute(obj, 'STATUS_DEF')
+        req.priority = self._get_attribute(obj, 'PRIORITY_DEF')
+        req.binding = self._get_attribute(obj, 'BINDING_DEF')
+        req.verification = self._get_attribute(obj, 'VERIFICATION_DEF')
+        return req
 
-        # Apply hierarchy relationships
-        self._apply_spec_hierarchy(root, ns, req_dict)
+    def _get_attribute(self, obj, attr_ref, allow_xhtml=False):
+        # Search ATTRIBUTE-VALUE-STRING
+        for attr in obj.findall('reqif:VALUES/*', REQIF_NS):
+            definition = attr.find('reqif:DEFINITION/*', REQIF_NS)
+            if definition is not None and definition.text == attr_ref:
+                if attr.tag.endswith('ATTRIBUTE-VALUE-STRING'):
+                    val = attr.find('reqif:THE-VALUE', REQIF_NS)
+                    return val.text if val is not None else None
+                elif attr.tag.endswith('ATTRIBUTE-VALUE-XHTML') and allow_xhtml:
+                    val = attr.find('reqif:THE-VALUE', REQIF_NS)
+                    if val is not None:
+                        div = val.find('xhtml:div', REQIF_NS)
+                        if div is not None:
+                            return ''.join(div.itertext()).strip()
+                        return val.text.strip() if val.text else None
+                elif attr.tag.endswith('ATTRIBUTE-VALUE-ENUMERATION'):
+                    # EA may store ENUM as raw text
+                    values = attr.findall('reqif:VALUES/reqif:ENUM-VALUE-REF', REQIF_NS)
+                    if values:
+                        return ','.join(v.text for v in values if v.text)
+                    # Fallback for EA raw text
+                    val = attr.find('reqif:THE-VALUE', REQIF_NS)
+                    if val is not None:
+                        return val.text
+        return None
 
-        # Flatten to list
-        bundle = ReqIFBundle()
-        bundle.requirements = list(req_dict.values())
-        return bundle.requirements
-
-    def _get_namespaces(self, root):
-        ns = {}
-        for k, v in root.attrib.items():
-            if k.startswith("xmlns:"):
-                ns[k.split(":")[1]] = v
-        ns["reqif"] = root.tag.split("}")[0].strip("{")
-        return ns
-
-    def _parse_attribute_definitions(self, root, ns):
-        attr_defs = {}
-        for ad in root.findall(".//reqif:ATTRIBUTE-DEFINITIONS/reqif:*", ns):
-            attr_id = ad.get("IDENTIFIER")
-            attr_defs[attr_id] = ad.tag.split("}")[-1]
-        return attr_defs
-
-    def _parse_spec_objects(self, root, ns, attr_defs):
-        req_dict = {}
-        for obj in root.findall(".//reqif:SPEC-OBJECT", ns):
-            identifier = obj.findtext("reqif:IDENTIFIER", default=None, namespaces=ns)
-            title = None
-            description = None
-            attributes = {}
-            for val in obj.findall("reqif:VALUES/*", ns):
-                attr_id = val.get("DEFINITION")
-                attr_value = val.findtext("reqif:THE-VALUE", default=None, namespaces=ns)
-                if attr_id in ["AD_TITLE", "AD_NAME", "TITLE"]:
-                    title = attr_value
-                elif attr_id in ["AD_DESC", "DESC", "DESCRIPTION"]:
-                    description = attr_value
+    def _parse_hierarchy(self, node, parent_req):
+        for child_ref in node.findall('reqif:CHILD-OBJECT-REF', REQIF_NS):
+            child_id = child_ref.text
+            req = self.requirements.get(child_id)
+            if req:
+                if parent_req:
+                    parent_req.children.append(req)
                 else:
-                    attributes[attr_id] = attr_value
-            req_dict[identifier] = ReqIFRequirement(
-                identifier=identifier,
-                title=title or "",
-                description=description or "",
-                attributes=attributes,
-            )
-        return req_dict
+                    self.roots.append(req)
 
-    def _apply_spec_hierarchy(self, root, ns, req_dict):
-        for sh in root.findall(".//reqif:SPEC-HIERARCHY", ns):
-            parent_obj_id = sh.findtext("reqif:OBJECT", default=None, namespaces=ns)
-            children = sh.findall("reqif:CHILDREN/reqif:SPEC-HIERARCHY", ns)
-            for child in children:
-                child_obj_id = child.findtext("reqif:OBJECT", default=None, namespaces=ns)
-                if child_obj_id in req_dict:
-                    req_dict[child_obj_id].parent_id = parent_obj_id
-                # recursively handle deeper hierarchy
-                self._apply_spec_hierarchy_recursive(child, ns, req_dict, parent_obj_id)
+        # Recursively parse nested SPEC-HIERARCHY-ROOTs
+        for sub_root in node.findall('reqif:SPEC-HIERARCHY-ROOT', REQIF_NS):
+            self._parse_hierarchy(sub_root, parent_req)
 
-    def _apply_spec_hierarchy_recursive(self, node, ns, req_dict, parent_id):
-        children = node.findall("reqif:CHILDREN/reqif:SPEC-HIERARCHY", ns)
-        for child in children:
-            child_obj_id = child.findtext("reqif:OBJECT", default=None, namespaces=ns)
-            if child_obj_id in req_dict:
-                req_dict[child_obj_id].parent_id = parent_id
-            self._apply_spec_hierarchy_recursive(child, ns, req_dict, child_obj_id)
+    def get_all_requirements(self):
+        return list(self.requirements.values())
+
+    def get_roots(self):
+        return self.roots
+
+# Usage example
+if __name__ == "__main__":
+    parser = ReqIFParser("sample.reqif")
+    parser.parse()
+    for r in parser.get_all_requirements():
+        print(f"{r.identifier}: {r.title} | {r.status} | {r.description[:50] if r.description else 'No description'}")
+
 
 
 

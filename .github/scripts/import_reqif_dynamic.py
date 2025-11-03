@@ -4,7 +4,9 @@ import sys
 import glob
 import traceback
 import requests
-from reqif_importer import ReqIFImporter
+
+# Use full-featured universal ReqIF parser
+from reqif_parser_full import ReqIFParser  # New universal parser for EA/Polarion/DOORS/Jama
 
 # -------------------------
 # Parse .reqif files
@@ -18,13 +20,14 @@ def parse_reqif_requirements():
     reqif_file = reqif_files[0]
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
-    importer = ReqIFImporter(reqif_file)
-    req_list = importer.parse()
+    parser = ReqIFParser(reqif_file)
+    parser.parse()  # Parses all supported dialects
 
-    # Convert ReqIFRequirement objects to consistent dicts
+    req_list = parser.get_all_requirements()  # Returns list of ReqIFRequirement objects
+
     req_dict = {}
     for i, req in enumerate(req_list):
-        req_id = getattr(req, "id", None) or getattr(req, "identifier", None) or f"REQ-{i+1}"
+        req_id = getattr(req, "identifier", None) or getattr(req, "id", None) or f"REQ-{i+1}"
         req_dict[req_id] = {
             "id": req_id,
             "title": getattr(req, "title", "") or "",
@@ -34,7 +37,6 @@ def parse_reqif_requirements():
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
-
 
 # -------------------------
 # GitHub helpers
@@ -65,7 +67,7 @@ def format_req_body(req):
     lines.append("**Description:**")
     lines.append("\n".join(desc_lines) if desc_lines else "(No description found)")
     lines.append("")
-    
+
     # Handle attributes safely
     attrs = req.get("attributes", {})
     if attrs:
@@ -74,9 +76,8 @@ def format_req_body(req):
             key = (k or "Unknown").replace("_", " ").title()
             val = str(v).strip() if v is not None else "(No value)"
             lines.append(f"{key}: {val}")
-    
-    return "\n".join(lines)
 
+    return "\n".join(lines)
 
 # -------------------------
 # GitHub issue management
@@ -163,5 +164,6 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
 
 

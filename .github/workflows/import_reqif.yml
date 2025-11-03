@@ -1,24 +1,21 @@
-name: Import ReqIF to GitHub
+name: Import ReqIF
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      reqif-file:
+        description: 'ReqIF file to import'
+        required: true
+        default: 'sample.reqif'
 
-permissions:
-  contents: read
-  issues: write
-  
 jobs:
   import_reqif:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
@@ -26,10 +23,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests
 
       - name: Run ReqIF import
-        run: |
-          python .github/scripts/import_reqif_dynamic.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/import_reqif_dynamic.py "${{ github.event.inputs.reqif-file }}"
