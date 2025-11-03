@@ -58,19 +58,25 @@ def choose_title(req):
 
 def format_req_body(req):
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
+    
+    # Handle description safely
     description = (req.get("description") or "").strip()
     desc_lines = [line.strip() for line in description.splitlines() if line.strip()]
     lines.append("**Description:**")
     lines.append("\n".join(desc_lines) if desc_lines else "(No description found)")
     lines.append("")
+    
+    # Handle attributes safely
     attrs = req.get("attributes", {})
     if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
-            key = k.replace("_", " ").title()
-            val = str(v).strip()
+            key = (k or "Unknown").replace("_", " ").title()
+            val = str(v).strip() if v is not None else "(No value)"
             lines.append(f"{key}: {val}")
+    
     return "\n".join(lines)
+
 
 # -------------------------
 # GitHub issue management
