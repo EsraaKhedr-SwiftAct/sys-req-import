@@ -8,7 +8,7 @@ Extracts:
 Compatible with any ReqIF-compliant tool (Polarion, DOORS, EA, Jama, etc.)
 """
 
-from reqif import ReqIFParser as OfficialReqIFParser
+from reqif import ReqIFParser  as OfficialReqIFParser
 
 class ReqIFImporter:
     def __init__(self, file_path):
