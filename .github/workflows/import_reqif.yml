@@ -33,12 +33,13 @@ jobs:
           echo "Contents of strictdoc_local_fixed (after extraction):"
           ls -R .github/scripts/strictdoc_local_fixed || true
 
-      - name: Execute the script
+      - name: Execute the import script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "# 3. Execute the import script using local parser"
-          # Add the parent folder of strictdoc_local_fixed to PYTHONPATH
+          # Add parent folder to PYTHONPATH so Python can find 'strictdoc_local_fixed'
           export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
           python .github/scripts/import_reqif_dynamic.py
+  

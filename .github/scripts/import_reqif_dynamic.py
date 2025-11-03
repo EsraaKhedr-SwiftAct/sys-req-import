@@ -36,7 +36,7 @@ else:
     sys.exit(1)
 
 try:
-    from reqif_importer import ReqIFImporter as ReqIFParser
+    from strictdoc_local_fixed.reqif_importer import ReqIFImporter as ReqIFParser
     print("✅ Local StrictDoc-compatible ReqIF importer loaded successfully.")
 except Exception as e:
     print(f"❌ Could not import reqif_importer from {strictdoc_path}: {e}")
