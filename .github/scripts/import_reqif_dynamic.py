@@ -11,24 +11,29 @@ import traceback
 import requests
 
 # =====================================================
-# 🧱 Load local StrictDoc-compatible ReqIF parser
+# 🧱 Load StrictDoc ReqIF parser
 # =====================================================
 scripts_dir = os.path.dirname(__file__)
-strictdoc_path = os.path.join(scripts_dir, "strictdoc_local_fixed")
+strictdoc_parent = os.path.join(scripts_dir)  # parent of strictdoc_local_fixed
+strictdoc_folder = os.path.join(scripts_dir, "strictdoc_local_fixed")
 
-if os.path.isdir(strictdoc_path):
-    sys.path.insert(0, strictdoc_path)
-    print(f"📂 Added to PYTHONPATH: {strictdoc_path}")
+if os.path.isdir(strictdoc_folder):
+    sys.path.insert(0, strictdoc_parent)
+    print(f"📂 Added to PYTHONPATH: {strictdoc_parent}")
+    print("🔍 Files in PYTHONPATH directory:")
+    for f in os.listdir(strictdoc_parent):
+        print(f"  {f}")
 else:
     print("❌ strictdoc_local_fixed directory not found.")
     sys.exit(1)
 
 try:
-    from reqif_importer import ReqIFImporter as ReqIFParser
+    from strictdoc_local_fixed.reqif_importer import ReqIFImporter as ReqIFParser
     print("✅ Local StrictDoc-compatible ReqIF importer loaded successfully.")
 except Exception as e:
-    print(f"❌ Could not import reqif_importer from {strictdoc_path}: {e}")
+    print(f"❌ Could not import reqif_importer: {e}")
     sys.exit(1)
+
 
 # =====================================================
 # 🔹 Parse .reqif file

@@ -22,11 +22,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          echo "# 1. Install Python dependencies"
           pip install --upgrade pip setuptools wheel requests lxml
 
       - name: Unpack local StrictDoc substitute
         run: |
-          mkdir -p .github/scripts/strictdoc_local_fixed
+          echo "# 2. Unpack strictdoc_local_fixed.zip"
+          mkdir -p .github/scripts
           unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
           echo "📄 Files in strictdoc_local_fixed after unzip:"
           ls -R .github/scripts/strictdoc_local_fixed || true
@@ -36,8 +38,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
+          echo "# 3. Execute the import script using local parser"
+          # Add parent folder to PYTHONPATH
+          export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
           echo "📂 PYTHONPATH is now: $PYTHONPATH"
           echo "🔍 Files in PYTHONPATH directory:"
-          ls -R .github/scripts/strictdoc_local_fixed
+          ls -R .github/scripts
           python .github/scripts/import_reqif_dynamic.py
