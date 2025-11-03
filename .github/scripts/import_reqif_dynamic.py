@@ -77,29 +77,54 @@ def github_headers(token):
     }
 
 # =====================================================
-# 🔹 Helper: format requirement body
+# 🔹 Helper: format requirement body (universal & clean)
 # =====================================================
-
 def format_req_body(req):
     """
     Format requirement for GitHub issue body in Markdown:
       - Requirement ID
-      - Main description
-      - All attributes dynamically
+      - Title
+      - Description (only descriptive text)
+      - Attributes (all remaining key-value pairs)
+    Works generically with ReqIF files from Polarion, DOORS, Jama, PTC, etc.
     """
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
-    description = req.get('description', '(No description found)')
 
-    lines.append("**Description:**")
-    lines.append(description if description else "(No description found)")
-
-    # Collect all attributes except id, title, description
-    attrs = {k: v for k, v in req.items() if k not in ["id", "title", "description"]}
-    if attrs:
+    # --- Title ---
+    title = req.get("title", "").strip()
+    if title:
+        lines.append("**Title:**")
+        lines.append(title)
         lines.append("")
+
+    # --- Description ---
+    description = req.get("description", "").strip()
+    lines.append("**Description:**")
+    if description:
+        lines.append(description)
+    else:
+        lines.append("(No description found)")
+    lines.append("")
+
+    # --- Attributes ---
+    attrs = {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
+    if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
-            lines.append(f"{k}: {v}")
+            # Normalize key name and value formatting
+            clean_key = k.replace("_", " ").title()
+            clean_val = str(v)
+            # Optional: simplify ENUM or coded values like STATUS_APPROVED → Approved
+            if isinstance(clean_val, str):
+                clean_val = (
+                    clean_val
+                    .replace("STATUS_", "")
+                    .replace("ENUM:", "")
+                    .replace("_", " ")
+                    .strip()
+                    .capitalize()
+                )
+            lines.append(f"{clean_key}: {clean_val}")
 
     return "\n".join(lines)
 
