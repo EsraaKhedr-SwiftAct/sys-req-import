@@ -162,7 +162,3 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
-
-
-
-

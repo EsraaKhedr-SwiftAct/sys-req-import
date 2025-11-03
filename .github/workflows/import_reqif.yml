@@ -7,6 +7,11 @@ on:
         description: 'ReqIF file to import'
         required: true
         default: 'sample.reqif'
+        
+permissions:
+  contents: read        # keep read for repo content
+  issues: write         # allow creating/updating issues
+       
 
 jobs:
   import_reqif:
