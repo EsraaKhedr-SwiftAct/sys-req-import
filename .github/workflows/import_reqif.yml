@@ -12,72 +12,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repo
+      # ---------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Python
+      # ---------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # 3️⃣ Install dependencies
+      # ---------------------------
       - name: Install dependencies
         run: |
-          echo "# Installing Python dependencies"
+          echo "# 1. Install Python dependencies"
           pip install --upgrade pip setuptools wheel requests lxml
 
-      # 4️⃣ Unpack local StrictDoc substitute
+      # ---------------------------
       - name: Unpack local StrictDoc substitute
         run: |
-          echo "# Unpacking strictdoc_local_fixed.zip"
-          ZIP_PATH=".github/scripts/strictdoc_local_fixed.zip"
-          DEST_DIR=".github/scripts/strictdoc_local_fixed"
+          echo "# 2. Unpack strictdoc_local_fixed.zip"
+          mkdir -p .github/scripts
+          unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
+          echo "Contents of strictdoc_local_fixed (after extraction):"
+          ls -R .github/scripts/strictdoc_local_fixed || true
 
-          # Ensure zip exists
-          if [ ! -f "$ZIP_PATH" ]; then
-            echo "❌ $ZIP_PATH not found in repo."
-            exit 1
-          fi
-
-          mkdir -p "$DEST_DIR"
-          unzip -o "$ZIP_PATH" -d "$DEST_DIR"
-
-          # Verify contents
-          echo "Contents of strictdoc_local_fixed after extraction:"
-          ls -R "$DEST_DIR" || true
-
-      # 5️⃣ Execute the import script
+      # ---------------------------
       - name: Execute the import script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          echo "# Running import_reqif_dynamic.py with local parser"
+          echo "# 3. Execute the import script using local parser"
 
           # Add local StrictDoc folder to PYTHONPATH
           export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
 
-          # Check that reqif_importer.py exists
+          # Ensure reqif_importer.py exists
           if [ ! -f ".github/scripts/strictdoc_local_fixed/reqif_importer.py" ]; then
             echo "❌ reqif_importer.py not found in strictdoc_local_fixed folder"
             exit 1
           fi
 
-          # Run the script and catch any import errors
-          python - <<'EOF'
-import sys
-try:
-    from reqif_importer import ReqIFImporter
-    print("✅ ReqIF importer loaded successfully.")
-except Exception as e:
-    print(f"❌ Could not import reqif_importer: {e}")
-    sys.exit(1)
-
-# Execute main script
-import subprocess
-ret = subprocess.run(["python", ".github/scripts/import_reqif_dynamic.py"])
-if ret.returncode != 0:
-    sys.exit(ret.returncode)
-EOF
+          # Run the Python import script
+          python .github/scripts/import_reqif_dynamic.py
