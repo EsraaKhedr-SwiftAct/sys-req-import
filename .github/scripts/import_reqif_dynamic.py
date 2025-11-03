@@ -37,6 +37,8 @@ except ImportError:
     sys.exit(1)
 
 print("✅ ReqIF importer loaded successfully.")
+
+
 # =====================================================
 # 🔹 Parse .reqif file into a dict keyed by requirement ID
 # =====================================================
@@ -45,7 +47,6 @@ def parse_reqif_requirements():
     Loads the first .reqif file found in the current directory,
     parses it, and returns a dict keyed by requirement ID.
     """
-    # Find .reqif file
     reqif_files = glob.glob("*.reqif")
     if not reqif_files:
         print("❌ No .reqif file found in current directory.")
@@ -57,7 +58,6 @@ def parse_reqif_requirements():
     importer = ReqIFParser(reqif_file)
     req_list = importer.parse()
 
-    # Convert to dict keyed by 'id'
     req_dict = {req['id']: req for req in req_list}
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
@@ -76,6 +76,42 @@ def github_headers(token):
         "Accept": "application/vnd.github+json",
     }
 
+
+# =====================================================
+# 🆕 Helper: choose smart title
+# =====================================================
+def choose_title(req):
+    """
+    Return the best title for a requirement:
+      - prefer req['title'] if it is not just the ID
+      - otherwise, use the first meaningful line from description
+    """
+    req_id = str(req.get('id', '')).strip()
+    title = (req.get('title') or '').strip()
+
+    # Use title if it's not identical to ID and is meaningful
+    if title and title != req_id and len(title) > len(req_id):
+        return title
+
+    # Try extracting descriptive line from description
+    desc = (req.get('description') or '').strip()
+    if desc:
+        for line in desc.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Skip lines that look like IDs or attributes
+            if line.upper() == req_id.upper():
+                continue
+            if any(line.lower().startswith(p) for p in ("enum", "status", "priority", "verification", "binding", "mandatory", "optional")):
+                continue
+            # Return first descriptive line
+            if len(line.split()) >= 3:
+                return line
+
+    return title or req_id
+
+
 # =====================================================
 # 🔹 Helper: format requirement body (universal & clean)
 # =====================================================
@@ -84,7 +120,7 @@ def format_req_body(req):
     Format requirement for GitHub issue body in Markdown:
       - Requirement ID
       - Title
-      - Description (only descriptive text)
+      - Description (only pure descriptive text)
       - Attributes (all remaining key-value pairs)
     Works generically with ReqIF files from Polarion, DOORS, Jama, PTC, etc.
     """
@@ -97,24 +133,32 @@ def format_req_body(req):
         lines.append(title)
         lines.append("")
 
-    # --- Description ---
+    # --- Description (clean only the real description text) ---
     description = req.get("description", "").strip()
-    lines.append("**Description:**")
     if description:
-        lines.append(description)
-    else:
-        lines.append("(No description found)")
+        desc_lines = []
+        for line in description.splitlines():
+            clean = line.strip()
+            if not clean:
+                continue
+            if any(clean.lower().startswith(prefix) for prefix in ["enum", "status", "priority", "mandatory", "high", "low"]):
+                continue
+            if len(clean.split()) <= 2 and clean.upper().startswith("R"):  # e.g., "R001"
+                continue
+            desc_lines.append(clean)
+        description = "\n".join(desc_lines)
+
+    lines.append("**Description:**")
+    lines.append(description if description else "(No description found)")
     lines.append("")
 
-    # --- Attributes ---
+    # --- Attributes (everything except ID, title, and description) ---
     attrs = {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
     if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
-            # Normalize key name and value formatting
             clean_key = k.replace("_", " ").title()
             clean_val = str(v)
-            # Optional: simplify ENUM or coded values like STATUS_APPROVED → Approved
             if isinstance(clean_val, str):
                 clean_val = (
                     clean_val
@@ -128,11 +172,11 @@ def format_req_body(req):
 
     return "\n".join(lines)
 
+
 # =====================================================
 # 🧭 GitHub issue management
 # =====================================================
 def get_existing_issues(repo, token):
-    """Fetch all issues with label 'reqif-import'."""
     print("📡 Fetching existing GitHub issues...")
     url = f"{GITHUB_API_URL}/{repo}/issues?state=all&labels=reqif-import&per_page=100"
     issues = []
@@ -146,8 +190,9 @@ def get_existing_issues(repo, token):
 
 
 def create_issue(repo, token, req):
+    title_text = choose_title(req)
     data = {
-        "title": f"[{req['id']}] {req['title']}",
+        "title": f"[{req['id']}] {title_text}",
         "body": format_req_body(req),
         "labels": ["requirement", "reqif-import"],
     }
@@ -161,9 +206,10 @@ def create_issue(repo, token, req):
 
 
 def update_issue(repo, token, issue_number, req):
+    title_text = choose_title(req)
     url = f"{GITHUB_API_URL}/{repo}/issues/{issue_number}"
     data = {
-        "title": f"[{req['id']}] {req['title']}",
+        "title": f"[{req['id']}] {title_text}",
         "body": format_req_body(req),
         "state": "open",
     }
@@ -184,6 +230,7 @@ def close_issue(repo, token, issue_number, req_id):
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
 
+
 # =====================================================
 # 🔁 Main synchronization
 # =====================================================
@@ -199,7 +246,6 @@ def sync_reqif_to_github():
         reqs = parse_reqif_requirements()
         issues = get_existing_issues(repo_full_name, github_token)
 
-        # Map GitHub issues by REQ-ID (parsed from title)
         issue_map = {}
         for issue in issues:
             title = issue["title"]
@@ -207,14 +253,13 @@ def sync_reqif_to_github():
                 req_id = title.split("]")[0][1:]
                 issue_map[req_id] = issue
 
-        # === Create/Update/Reopen ===
         for req_id, req in reqs.items():
-            new_title = f"[{req['id']}] {req['title']}"
+            chosen_title = choose_title(req)
+            new_title = f"[{req['id']}] {chosen_title}"
             new_body = format_req_body(req)
 
             if req_id in issue_map:
                 issue = issue_map[req_id]
-                # Only update if title or body changed
                 if issue["title"] != new_title or issue["body"] != new_body:
                     if issue["state"] == "closed":
                         print(f"🔄 Reopening and updating issue for {req_id}")
@@ -226,19 +271,19 @@ def sync_reqif_to_github():
             else:
                 create_issue(repo_full_name, github_token, req)
 
-        # === Close missing ===
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
 
         print("✅ Synchronization complete.")
 
-    except Exception as e:
+    except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
 
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
 
 
