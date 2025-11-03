@@ -16,7 +16,7 @@ class ReqIFImporter:
         self.file_path = file_path
 
     def parse(self):
-        reqif = OfficialReqIFParser().load(self.file_path)
+        reqif = OfficialReqIFParser(self.file_path).parse()
         requirements = []
 
         for spec_object in reqif.spec_objects:
