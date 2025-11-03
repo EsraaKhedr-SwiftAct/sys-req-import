@@ -3,67 +3,34 @@ import sys
 import glob
 import traceback
 import requests
+from reqif_importer import ReqIFImporter
 
-# =====================================================
-# 🧱 Load StrictDoc ReqIF parser
-# =====================================================
-scripts_dir = os.path.dirname(os.path.abspath(__file__))
-strictdoc_folder = os.path.join(scripts_dir, "strictdoc_local_fixed")
-
-if os.path.isdir(strictdoc_folder):
-    sys.path.insert(0, scripts_dir)  # Add repo root where strictdoc_local_fixed exists
-    print(f"📂 Added to PYTHONPATH: {scripts_dir}")
-    print("🔍 Files in PYTHONPATH directory:")
-    for f in os.listdir(scripts_dir):
-        print(f"  {f}")
-else:
-    print("❌ strictdoc_local_fixed directory not found.")
-    sys.exit(1)
-
-try:
-    from strictdoc_local_fixed.reqif_importer import ReqIFImporter as ReqIFParser
-    print("✅ Local StrictDoc-compatible ReqIF importer loaded successfully.")
-except Exception as e:
-    print(f"❌ Could not import reqif_importer: {e}")
-    sys.exit(1)
-
-
-# =====================================================
-# 🔹 Parse .reqif file
-# =====================================================
+# -------------------------
+# Parse .reqif files
+# -------------------------
 def parse_reqif_requirements():
-    reqif_file = os.environ.get("REQIF_FILE")  # Optional env input
-    if not reqif_file:
-        reqif_files = glob.glob("*.reqif")
-        if not reqif_files:
-            print("❌ No .reqif file found in current directory.")
-            sys.exit(1)
-        reqif_file = reqif_files[0]
-
-    if not os.path.isfile(reqif_file):
-        print(f"❌ ReqIF file not found: {reqif_file}")
+    reqif_files = glob.glob("*.reqif")
+    if not reqif_files:
+        print("❌ No .reqif file found in current directory.")
         sys.exit(1)
 
+    reqif_file = reqif_files[0]
     print(f"📄 Parsing ReqIF file: {reqif_file}")
-    importer = ReqIFParser(reqif_file)
+
+    importer = ReqIFImporter(reqif_file)
     req_list = importer.parse()
     req_dict = {req['id']: req for req in req_list}
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
 
-
-# =====================================================
-# 🔧 GitHub setup
-# =====================================================
+# -------------------------
+# GitHub helpers
+# -------------------------
 GITHUB_API_URL = "https://api.github.com/repos"
 
 def github_headers(token):
     return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
 
-
-# =====================================================
-# 🆕 Helper: choose title
-# =====================================================
 def choose_title(req):
     req_id = str(req.get('id', '')).strip()
     title = (req.get('title') or '').strip()
@@ -76,10 +43,6 @@ def choose_title(req):
             return clean
     return title or req_id
 
-
-# =====================================================
-# 🔹 Format requirement body
-# =====================================================
 def format_req_body(req):
     lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
     description = (req.get("description") or "").strip()
@@ -96,10 +59,9 @@ def format_req_body(req):
             lines.append(f"{key}: {val}")
     return "\n".join(lines)
 
-
-# =====================================================
-# 🧭 GitHub issue management
-# =====================================================
+# -------------------------
+# GitHub issue management
+# -------------------------
 def get_existing_issues(repo, token):
     url = f"{GITHUB_API_URL}/{repo}/issues?state=all&labels=reqif-import&per_page=100"
     issues = []
@@ -109,7 +71,6 @@ def get_existing_issues(repo, token):
         issues += resp.json()
         url = resp.links.get("next", {}).get("url")
     return issues
-
 
 def create_issue(repo, token, req):
     data = {
@@ -124,7 +85,6 @@ def create_issue(repo, token, req):
         print(f"🆕 Created issue for {req['id']}")
     return resp.json()
 
-
 def update_issue(repo, token, issue_number, req):
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
@@ -138,7 +98,6 @@ def update_issue(repo, token, issue_number, req):
         print(f"♻️ Updated issue #{issue_number} ({req['id']})")
     return resp.json()
 
-
 def close_issue(repo, token, issue_number, req_id):
     data = {"state": "closed"}
     resp = requests.patch(f"{GITHUB_API_URL}/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
@@ -147,10 +106,9 @@ def close_issue(repo, token, issue_number, req_id):
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
 
-
-# =====================================================
-# 🔁 Main synchronization
-# =====================================================
+# -------------------------
+# Main synchronization
+# -------------------------
 def sync_reqif_to_github():
     github_token = os.getenv("GITHUB_TOKEN")
     repo_full_name = os.getenv("GITHUB_REPOSITORY")
@@ -182,6 +140,6 @@ def sync_reqif_to_github():
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
 
-
 if __name__ == "__main__":
     sync_reqif_to_github()
+
