@@ -20,18 +20,21 @@ def parse_reqif_requirements():
 
     importer = ReqIFImporter(reqif_file)
     req_list = importer.parse()
-    # Ensure consistent dict format with 'id', 'title', 'description', 'attributes'
-    req_dict = {
-        str(req.get('id') or req.get('identifier') or f"REQ-{i+1}"): {
-            "id": req.get('id') or req.get('identifier') or f"REQ-{i+1}",
-            "title": req.get('title') or "",
-            "description": req.get('description') or "",
-            "attributes": {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
+
+    # Convert ReqIFRequirement objects to consistent dicts
+    req_dict = {}
+    for i, req in enumerate(req_list):
+        req_id = getattr(req, "id", None) or getattr(req, "identifier", None) or f"REQ-{i+1}"
+        req_dict[req_id] = {
+            "id": req_id,
+            "title": getattr(req, "title", "") or "",
+            "description": getattr(req, "description", "") or "",
+            "attributes": getattr(req, "attributes", {}) or {}
         }
-        for i, req in enumerate(req_list)
-    }
+
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
+
 
 # -------------------------
 # GitHub helpers
