@@ -12,23 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ---------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # ---------------------------
       - name: Install dependencies
         run: |
           echo "# 1. Install Python dependencies"
           pip install --upgrade pip setuptools wheel requests lxml
 
-      # ---------------------------
       - name: Unpack local StrictDoc substitute
         run: |
           echo "# 2. Unpack strictdoc_local_fixed.zip"
@@ -37,22 +33,12 @@ jobs:
           echo "Contents of strictdoc_local_fixed (after extraction):"
           ls -R .github/scripts/strictdoc_local_fixed || true
 
-      # ---------------------------
-      - name: Execute the import script
+      - name: Execute the script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "# 3. Execute the import script using local parser"
-
-          # Add local StrictDoc folder to PYTHONPATH
-          export PYTHONPATH="$PWD/.github/scripts/strictdoc_local_fixed:$PYTHONPATH"
-
-          # Ensure reqif_importer.py exists
-          if [ ! -f ".github/scripts/strictdoc_local_fixed/reqif_importer.py" ]; then
-            echo "❌ reqif_importer.py not found in strictdoc_local_fixed folder"
-            exit 1
-          fi
-
-          # Run the Python import script
+          # Add the parent folder of strictdoc_local_fixed to PYTHONPATH
+          export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
           python .github/scripts/import_reqif_dynamic.py
