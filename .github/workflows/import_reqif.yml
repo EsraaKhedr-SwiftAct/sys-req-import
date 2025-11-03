@@ -1,47 +1,37 @@
-name: Import System Requirements from ReqIF
+name: import-reqif
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-
-permissions:
-  contents: read
-  issues: write
 
 jobs:
   import-reqif:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    # 1. Checkout the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+    # 2. Setup Python
+    - name: Setup Python 3.x
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-      - name: Install dependencies
-        run: |
-          echo "# 1. Install Python dependencies"
-          pip install --upgrade pip setuptools wheel requests lxml
+    # 3. Install Python dependencies
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel requests lxml
 
-      - name: Unpack local StrictDoc substitute
-        run: |
-          echo "# 2. Unpack strictdoc_local_fixed.zip"
-          mkdir -p .github/scripts
-          unzip -o .github/scripts/strictdoc_local_fixed.zip -d .github/scripts/
-          echo "📄 Files in strictdoc_local_fixed after unzip:"
-          ls -R .github/scripts/strictdoc_local_fixed || true
+    # 4. Set PYTHONPATH to include scripts folder
+    - name: Set PYTHONPATH
+      run: |
+        export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
+        echo "📂 PYTHONPATH set to: $PYTHONPATH"
 
-      - name: Execute the script
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          echo "# 3. Execute the import script using local parser"
-          # Add parent folder to PYTHONPATH
-          export PYTHONPATH="$PWD/.github/scripts:$PYTHONPATH"
-          echo "📂 PYTHONPATH is now: $PYTHONPATH"
-          echo "🔍 Files in PYTHONPATH directory:"
-          ls -R .github/scripts
-          python .github/scripts/import_reqif_dynamic.py
+    # 5. Run the import script
+    - name: Run import_reqif_dynamic.py
+      run: python .github/scripts/import_reqif_dynamic.py
