@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 import glob
@@ -19,7 +20,16 @@ def parse_reqif_requirements():
 
     importer = ReqIFImporter(reqif_file)
     req_list = importer.parse()
-    req_dict = {req['id']: req for req in req_list}
+    # Ensure consistent dict format with 'id', 'title', 'description', 'attributes'
+    req_dict = {
+        str(req.get('id') or req.get('identifier') or f"REQ-{i+1}"): {
+            "id": req.get('id') or req.get('identifier') or f"REQ-{i+1}",
+            "title": req.get('title') or "",
+            "description": req.get('description') or "",
+            "attributes": {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
+        }
+        for i, req in enumerate(req_list)
+    }
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
 
@@ -50,7 +60,7 @@ def format_req_body(req):
     lines.append("**Description:**")
     lines.append("\n".join(desc_lines) if desc_lines else "(No description found)")
     lines.append("")
-    attrs = {k: v for k, v in req.items() if k.lower() not in ["id", "title", "description"]}
+    attrs = req.get("attributes", {})
     if attrs:
         lines.append("**Attributes:**")
         for k, v in attrs.items():
@@ -121,10 +131,11 @@ def sync_reqif_to_github():
         issues = get_existing_issues(repo_full_name, github_token)
         issue_map = {}
         for issue in issues:
-            title = issue["title"]
+            title = issue.get("title", "")
             if title.startswith("[") and "]" in title:
                 req_id = title.split("]")[0][1:]
                 issue_map[req_id] = issue
+        # Create or update issues
         for req_id, req in reqs.items():
             if req_id in issue_map:
                 issue = issue_map[req_id]
@@ -132,6 +143,7 @@ def sync_reqif_to_github():
                     update_issue(repo_full_name, github_token, issue["number"], req)
             else:
                 create_issue(repo_full_name, github_token, req)
+        # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
@@ -142,4 +154,5 @@ def sync_reqif_to_github():
 
 if __name__ == "__main__":
     sync_reqif_to_github()
+
 
