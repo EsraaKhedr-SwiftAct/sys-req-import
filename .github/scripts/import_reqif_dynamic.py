@@ -26,25 +26,22 @@ def parse_reqif_requirements():
 
     req_dict = {}
     for i, req in enumerate(req_list):
-        # Generic dynamic attribute detection
         attributes = getattr(req, "attributes", {}) or {}
         req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
         title = getattr(req, "title", None) or attributes.get("Title") or req_id
         description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
 
-        # Fallbacks for malformed or empty fields
-        if not req_id.strip():
+        if not str(req_id).strip():
             req_id = f"REQ-{i+1}"
-        if not title.strip():
+        if not str(title).strip():
             title = req_id
-        if not description.strip():
+        if not str(description).strip():
             description = "(No description found)"
 
-        # Unescape XHTML if needed
-        description = html.unescape(description)
-        title = html.unescape(title)
+        description = html.unescape(str(description))
+        title = html.unescape(str(title))
 
-        # Normalize attributes: ensure strings, fallback if None
+        # Normalize attributes
         normalized_attrs = {}
         for k, v in attributes.items():
             key = str(k).strip() if k else "Unknown"
@@ -60,6 +57,7 @@ def parse_reqif_requirements():
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
+
 
 # -------------------------
 # GitHub helpers
@@ -81,26 +79,34 @@ def choose_title(req):
             return clean
     return title or req_id
 
+
+# -------------------------
+# Improved formatting (full attribute table)
+# -------------------------
 def format_req_body(req):
-    lines = [f"**Requirement ID:** {req.get('id', '(No ID)')}", ""]
-
-    # Description
-    description = (req.get("description") or "").strip()
-    desc_lines = [line.strip() for line in description.splitlines() if line.strip()]
-    lines.append("**Description:**")
-    lines.append("\n".join(desc_lines) if desc_lines else "(No description found)")
-    lines.append("")
-
-    # Attributes
+    desc = req.get("description", "(No description found)").strip()
     attrs = req.get("attributes", {})
-    if attrs:
-        lines.append("**Attributes:**")
-        for k, v in attrs.items():
-            key = (k or "Unknown").replace("_", " ").title()
-            val = str(v).strip() if v is not None else "(No value)"
-            lines.append(f"{key}: {val}")
 
-    return "\n".join(lines)
+    ignored = {"ID", "Id", "Title", "Description"}
+    other_attrs = {k: v for k, v in attrs.items() if k not in ignored}
+
+    body = f"""**Requirement ID:** `{req.get('id', '(No ID)')}`
+
+### 📝 Description
+{desc}
+
+### 📄 Attributes
+| Attribute | Value |
+|------------|--------|
+| ID | {req.get('id', '(No ID)')} |
+| Title | {req.get('title', '(Untitled)')} |
+"""
+
+    for k, v in other_attrs.items():
+        body += f"| {k} | {v} |\n"
+
+    return body.strip()
+
 
 # -------------------------
 # GitHub issue management
@@ -115,6 +121,7 @@ def get_existing_issues(repo, token):
         url = resp.links.get("next", {}).get("url")
     return issues
 
+
 def create_issue(repo, token, req):
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
@@ -127,6 +134,7 @@ def create_issue(repo, token, req):
     else:
         print(f"🆕 Created issue for {req['id']}")
     return resp.json()
+
 
 def update_issue(repo, token, issue_number, req):
     data = {
@@ -141,6 +149,7 @@ def update_issue(repo, token, issue_number, req):
         print(f"♻️ Updated issue #{issue_number} ({req['id']})")
     return resp.json()
 
+
 def close_issue(repo, token, issue_number, req_id):
     data = {"state": "closed"}
     resp = requests.patch(f"{GITHUB_API_URL}/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
@@ -148,6 +157,7 @@ def close_issue(repo, token, issue_number, req_id):
         print(f"❌ Failed to close issue #{issue_number}: {resp.text}")
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
+
 
 # -------------------------
 # Main synchronization
@@ -189,6 +199,7 @@ def sync_reqif_to_github():
     except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     sync_reqif_to_github()
