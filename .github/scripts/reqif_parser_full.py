@@ -91,12 +91,14 @@ class ReqIFParser:
     def _collect_attributes(self, spec_obj):
         attrs = {}
 
-        all_attrs = spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-STRING", self.ns) + \
-                    spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-XHTML", self.ns) + \
-                    spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-ENUMERATION", self.ns) + \
-                    spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-INTEGER", self.ns) + \
-                    spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-BOOLEAN", self.ns) + \
-                    spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-DATE", self.ns)
+        all_attrs = (
+            spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-STRING", self.ns)
+            + spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-XHTML", self.ns)
+            + spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-ENUMERATION", self.ns)
+            + spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-INTEGER", self.ns)
+            + spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-BOOLEAN", self.ns)
+            + spec_obj.findall(".//reqif:ATTRIBUTE-VALUE-DATE", self.ns)
+        )
 
         for attr in all_attrs:
             key = self._resolve_definition_name(attr)
@@ -123,16 +125,17 @@ class ReqIFParser:
             ref_elem = attr.find(f"reqif:DEFINITION/reqif:{def_type}", self.ns)
             if ref_elem is not None and ref_elem.text:
                 ref_id = ref_elem.text.strip()
+                # Direct match
                 if ref_id in self.def_map:
                     return self.def_map[ref_id]
-                # Fallback: partial match for GUID variations
+                # 🔁 Fallback for nonstandard or partial ID matches (nonstandard block)
                 for known_id, long_name in self.def_map.items():
                     if ref_id.lower() in known_id.lower() or known_id.lower() in ref_id.lower():
                         return long_name
         return None
 
     # ----------------------------------------------------------
-    # Extract THE-VALUE content
+    # Extract THE-VALUE content (StrictDoc-compatible)
     # ----------------------------------------------------------
     def _extract_value(self, attr):
         tag = attr.tag.split("}")[-1]
@@ -142,14 +145,19 @@ class ReqIFParser:
             return val.text.strip() if val is not None and val.text else ""
 
         if tag == "ATTRIBUTE-VALUE-XHTML":
-            # Handles both <xhtml:div> and direct <THE-VALUE> content
+            # StrictDoc-style XHTML resolution
             val_elem = attr.find("reqif:THE-VALUE", self.ns)
-            if val_elem is not None:
-                div_elem = val_elem.find("xhtml:div", self.ns)
-                if div_elem is not None:
-                    return "".join(div_elem.itertext()).strip()
-                return "".join(val_elem.itertext()).strip()
-            return ""
+            if val_elem is None:
+                return ""
+            # Case 1: <xhtml:div> inside <THE-VALUE>
+            div_elem = val_elem.find("xhtml:div", self.ns)
+            if div_elem is not None:
+                return "".join(div_elem.itertext()).strip()
+            # Case 2: direct XHTML content (no <div>)
+            if val_elem.text and val_elem.text.strip():
+                return val_elem.text.strip()
+            # Case 3: nested or mixed XHTML — join all inner text
+            return "".join(val_elem.itertext()).strip()
 
         if tag == "ATTRIBUTE-VALUE-ENUMERATION":
             vals = attr.findall("reqif:VALUES/reqif:ENUM-VALUE-REF", self.ns)
@@ -188,6 +196,7 @@ if __name__ == "__main__":
     requirements = parser.parse()
     for req in requirements:
         print(f"[{req.id}] {req.title or '(Untitled)'}")
-        print(f"  Description: {req.description[:80] if req.description else '(No description)'}\n")
+        print(f"  Description: {req.description[:80] if req.description else '(No description found)'}\n")
+
 
 
