@@ -1,9 +1,9 @@
-<<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <THE-HEADER>
     <REQ-IF-HEADER>
-      <COMMENT>Extended ReqIF example with Priority and Status</COMMENT>
+      <COMMENT>Sample ReqIF with Priority</COMMENT>
       <CREATION-TIME>2025-11-04T22:00:00Z</CREATION-TIME>
       <REQ-IF-TOOL-ID>ChatGPT-ReqIF-Generator</REQ-IF-TOOL-ID>
       <REQ-IF-VERSION>1.0</REQ-IF-VERSION>
@@ -24,15 +24,12 @@
             <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="ID_DEF" LONG-NAME="ID" TYPE="DT_STRING"/>
             <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="TITLE_DEF" LONG-NAME="Title" TYPE="DT_STRING"/>
             <ATTRIBUTE-DEFINITION-XHTML IDENTIFIER="DESC_DEF" LONG-NAME="Description" TYPE="DT_XHTML"/>
-            <!-- ✅ Added attributes -->
             <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="PRIORITY_DEF" LONG-NAME="Priority" TYPE="DT_STRING"/>
-            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="STATUS_DEF" LONG-NAME="Status" TYPE="DT_STRING"/>
           </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
       </SPEC-TYPES>
 
       <SPEC-OBJECTS>
-        <!-- First requirement -->
         <SPEC-OBJECT IDENTIFIER="REQ-1" TYPE="REQ-TYPE">
           <VALUES>
             <ATTRIBUTE-VALUE-STRING>
@@ -60,64 +57,11 @@
               </THE-VALUE>
             </ATTRIBUTE-VALUE-XHTML>
 
-            <!-- ✅ New Priority -->
             <ATTRIBUTE-VALUE-STRING>
               <DEFINITION>
                 <ATTRIBUTE-DEFINITION-STRING-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
               </DEFINITION>
               <THE-VALUE>High</THE-VALUE>
-            </ATTRIBUTE-VALUE-STRING>
-
-            <!-- ✅ New Status -->
-            <ATTRIBUTE-VALUE-STRING>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-STRING-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
-              </DEFINITION>
-              <THE-VALUE>Approved</THE-VALUE>
-            </ATTRIBUTE-VALUE-STRING>
-          </VALUES>
-        </SPEC-OBJECT>
-
-        <!-- Second requirement (example) -->
-        <SPEC-OBJECT IDENTIFIER="REQ-2" TYPE="REQ-TYPE">
-          <VALUES>
-            <ATTRIBUTE-VALUE-STRING>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-STRING-REF>ID_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
-              </DEFINITION>
-              <THE-VALUE>REQ-2</THE-VALUE>
-            </ATTRIBUTE-VALUE-STRING>
-
-            <ATTRIBUTE-VALUE-STRING>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-STRING-REF>TITLE_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
-              </DEFINITION>
-              <THE-VALUE>ABS Activation Timing</THE-VALUE>
-            </ATTRIBUTE-VALUE-STRING>
-
-            <ATTRIBUTE-VALUE-XHTML>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-XHTML-REF>DESC_DEF</ATTRIBUTE-DEFINITION-XHTML-REF>
-              </DEFINITION>
-              <THE-VALUE>
-                <xhtml:div>
-                  The ABS system shall activate within <b>50ms</b> of wheel slip detection.
-                </xhtml:div>
-              </THE-VALUE>
-            </ATTRIBUTE-VALUE-XHTML>
-
-            <ATTRIBUTE-VALUE-STRING>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-STRING-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
-              </DEFINITION>
-              <THE-VALUE>Medium</THE-VALUE>
-            </ATTRIBUTE-VALUE-STRING>
-
-            <ATTRIBUTE-VALUE-STRING>
-              <DEFINITION>
-                <ATTRIBUTE-DEFINITION-STRING-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-STRING-REF>
-              </DEFINITION>
-              <THE-VALUE>Draft</THE-VALUE>
             </ATTRIBUTE-VALUE-STRING>
           </VALUES>
         </SPEC-OBJECT>
@@ -131,16 +75,10 @@
                 <SPEC-OBJECT-REF>REQ-1</SPEC-OBJECT-REF>
               </OBJECT>
             </SPEC-HIERARCHY>
-            <SPEC-HIERARCHY>
-              <OBJECT>
-                <SPEC-OBJECT-REF>REQ-2</SPEC-OBJECT-REF>
-              </OBJECT>
-            </SPEC-HIERARCHY>
           </CHILDREN>
         </SPECIFICATION>
       </SPECIFICATIONS>
     </REQ-IF-CONTENT>
   </CORE-CONTENT>
 </REQ-IF>
-
     
