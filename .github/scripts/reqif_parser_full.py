@@ -42,13 +42,43 @@ class ReqIFParser:
         return reqs
     
     def _get_attribute_value_by_ref(self, spec_obj, ref_name):
-        """Return THE-VALUE text for a given attribute definition reference"""
+        """Return THE-VALUE text for a given attribute definition reference.
+        Handles STRING, XHTML, and ENUMERATION attributes."""
+        
+        # 1️⃣ ATTRIBUTE-VALUE-STRING
         for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-STRING", self.ns):
             def_ref = attr.find("reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-STRING-REF", self.ns)
             if def_ref is not None and def_ref.text == ref_name:
                 val = attr.find("reqif:THE-VALUE", self.ns)
                 return val.text.strip() if val is not None and val.text else ""
-        return ""
+        
+        # 2️⃣ ATTRIBUTE-VALUE-XHTML
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-XHTML", self.ns):
+            def_ref = attr.find("reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-XHTML-REF", self.ns)
+            if def_ref is not None and def_ref.text == ref_name:
+                val_elem = attr.find("reqif:THE-VALUE/xhtml:div", self.ns)
+                if val_elem is not None:
+                    # Extract all inner text from the XHTML div
+                    return "".join(val_elem.itertext()).strip()
+                # fallback if div not present
+                val_elem = attr.find("reqif:THE-VALUE", self.ns)
+                if val_elem is not None and val_elem.text:
+                    return val_elem.text.strip()
+        
+        # 3️⃣ ATTRIBUTE-VALUE-ENUMERATION
+        for attr in spec_obj.findall("reqif:ATTRIBUTE-VALUE-ENUMERATION", self.ns):
+            def_ref = attr.find("reqif:DEFINITION/reqif:ATTRIBUTE-DEFINITION-ENUMERATION-REF", self.ns)
+            if def_ref is not None and def_ref.text == ref_name:
+                values = attr.findall("reqif:VALUES/reqif:ENUM-VALUE-REF", self.ns)
+                if values:
+                    return ','.join(v.text for v in values if v.text)
+                val_elem = attr.find("reqif:THE-VALUE", self.ns)
+                if val_elem is not None and val_elem.text:
+                    return val_elem.text.strip()
+
+        # Attribute not found
+        return None
+
     
     def _collect_attributes(self, spec_obj):
         """Collect all attributes of the requirement into a dict"""
