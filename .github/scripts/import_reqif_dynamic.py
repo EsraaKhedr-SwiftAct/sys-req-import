@@ -22,14 +22,16 @@ def parse_reqif_requirements():
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
     parser = ReqIFParser(reqif_file)
-    req_list = parser.parse()  # Returns list of ReqIFRequirement objects
+    req_list = parser.parse()  # list of dicts
 
     req_dict = {}
     for i, req in enumerate(req_list):
-        attributes = getattr(req, "attributes", {}) or {}
-        req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
-        title = getattr(req, "title", None) or attributes.get("Title") or req_id
-        description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
+
+        attributes = req.get("attributes", {})
+
+        req_id = req.get("id") or req.get("identifier") or attributes.get("ID") or f"REQ-{i+1}"
+        title = req.get("title") or attributes.get("Title") or req_id
+        description = req.get("description") or attributes.get("Description") or "(No description found)"
 
         if not str(req_id).strip():
             req_id = f"REQ-{i+1}"
@@ -41,18 +43,23 @@ def parse_reqif_requirements():
         description = html.unescape(str(description))
         title = html.unescape(str(title))
 
-        # Normalize attributes
         normalized_attrs = {}
         for k, v in attributes.items():
-            key = str(k).strip() if k else "Unknown"
-            val = str(v).strip() if v is not None else "(No value)"
-            normalized_attrs[key] = val
+            normalized_attrs[str(k).strip()] = str(v).strip() if v is not None else "(No value)"
+
+        # ✅ Ensure GitHub formatting stays identical
+        normalized_attrs.setdefault("ID", req_id)
+        normalized_attrs.setdefault("Title", title)
+        normalized_attrs.setdefault("Description", description)
 
         req_dict[req_id] = {
             "id": req_id,
             "title": title,
             "description": description,
-            "attributes": normalized_attrs
+            "attributes": normalized_attrs,
+            "__children__": req.get("__children__", []),
+            "__parent__": req.get("__parent__", None),
+            "__links__": req.get("__links__", []),
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
