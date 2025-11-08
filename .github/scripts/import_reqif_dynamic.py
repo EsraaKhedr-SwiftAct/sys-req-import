@@ -22,48 +22,59 @@ def parse_reqif_requirements():
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
     parser = ReqIFParser(reqif_file)
-    req_list = parser.parse()  # list of dicts
+    parser.parse()
+
+    # The parser stores requirements in parser.requirements (dict of id → object)
+    req_objects = parser.get_all_requirements()
 
     req_dict = {}
-    for i, req in enumerate(req_list):
+    for i, req in enumerate(req_objects):
 
-        attributes = req.get("attributes", {})
+        # Convert object attributes
+        attributes = getattr(req, "attributes", {}) or {}
 
-        req_id = req.get("id") or req.get("identifier") or attributes.get("ID") or f"REQ-{i+1}"
-        title = req.get("title") or attributes.get("Title") or req_id
-        description = req.get("description") or attributes.get("Description") or "(No description found)"
+        req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
+        title = getattr(req, "title", None) or attributes.get("Title") or req_id
+        description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
 
-        if not str(req_id).strip():
-            req_id = f"REQ-{i+1}"
-        if not str(title).strip():
-            title = req_id
-        if not str(description).strip():
-            description = "(No description found)"
+        # Cleanup formatting
+        req_id = req_id.strip() if req_id else f"REQ-{i+1}"
+        title = title.strip() if title else req_id
+        description = description.strip() if description else "(No description found)"
 
-        description = html.unescape(str(description))
-        title = html.unescape(str(title))
+        title = html.unescape(title)
+        description = html.unescape(description)
 
+        # Normalize custom attributes
         normalized_attrs = {}
         for k, v in attributes.items():
             normalized_attrs[str(k).strip()] = str(v).strip() if v is not None else "(No value)"
 
-        # ✅ Ensure GitHub formatting stays identical
+        # Ensure required fields always exist
         normalized_attrs.setdefault("ID", req_id)
         normalized_attrs.setdefault("Title", title)
         normalized_attrs.setdefault("Description", description)
+
+        # Include hierarchy support (children → parent)
+        children = [c.identifier for c in getattr(req, "children", [])]
+        parent = None
+        for possible_parent in req_objects:
+            if req in getattr(possible_parent, "children", []):
+                parent = possible_parent.identifier
+                break
 
         req_dict[req_id] = {
             "id": req_id,
             "title": title,
             "description": description,
             "attributes": normalized_attrs,
-            "__children__": req.get("__children__", []),
-            "__parent__": req.get("__parent__", None),
-            "__links__": req.get("__links__", []),
+            "__children__": children,
+            "__parent__": parent,
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
     return req_dict
+
 
 
 # -------------------------

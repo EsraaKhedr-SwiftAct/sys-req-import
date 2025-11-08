@@ -323,7 +323,7 @@ class ReqIFParser:
         print(f"✅ Enumeration map updated (supports DOORS Next): {len(enum_mapping)} items")
         return enum_mapping
 
-    # ------------------------------------------------------------
+        # ------------------------------------------------------------
     # Build SPEC-OBJECT-TYPE → attribute-definition mapping
     # (Used by Polarion, Jama, DOORS Next)
     # ------------------------------------------------------------
@@ -975,6 +975,13 @@ if __name__ == "__main__":
     parser = ReqIFParser("sample.reqif", extract_attachments=False)
     requirements = parser.parse()
     parser.pretty_print_requirements(requirements)
+
+
+
+
+
+
+
 
 
 
