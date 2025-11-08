@@ -278,7 +278,7 @@ class ReqIFParser:
         - ReqIF Studio
         - Polarion
         - Jama
-        - DOORS Next (GUID-based ENUM-REFs)
+        - DOORS Next (GUID-based ENUM-REFS)
         """
         enum_mapping: Dict[str, str] = {}
 
@@ -716,6 +716,12 @@ class ReqIFParser:
 
         # Handle STRING
         if tag == "ATTRIBUTE-VALUE-STRING":
+            # Check for THE-VALUE as an XML attribute first (standard ReqIF format)
+            value_attr = attr.get("THE-VALUE")
+            if value_attr is not None:
+                return value_attr.strip()
+
+            # Fallback: Look for nested THE-VALUE element
             val = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
             return (val.text or "").strip() if val is not None and val.text else ""
 
