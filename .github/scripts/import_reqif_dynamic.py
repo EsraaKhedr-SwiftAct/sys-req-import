@@ -22,10 +22,7 @@ def parse_reqif_requirements():
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
     parser = ReqIFParser(reqif_file)
-    parser.parse()
-
-    # The parser stores requirements in parser.requirements (dict of id → object)
-    req_objects = parser.get_all_requirements()
+    req_objects = parser.parse()
 
     req_dict = {}
     for i, req in enumerate(req_objects):
