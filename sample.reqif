@@ -1,118 +1,221 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml"
-        identifier="REQIF-SAMPLE-001"
-        version="1.0">
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <THE-HEADER>
+    <REQ-IF-HEADER>
+      <COMMENT>Extended OMG ReqIF 1.0 Test File with Nested Requirements</COMMENT>
+      <CREATION-TIME>2025-11-04T23:30:00Z</CREATION-TIME>
+      <REQ-IF-TOOL-ID>OfficialExtendedTemplateGenerator</REQ-IF-TOOL-ID>
+      <REQ-IF-VERSION>1.0</REQ-IF-VERSION>
+      <SOURCE-TOOL-ID>ExampleTool</SOURCE-TOOL-ID>
+    </REQ-IF-HEADER>
+  </THE-HEADER>
+
   <CORE-CONTENT>
     <REQ-IF-CONTENT>
-      <!-- Attribute Definitions -->
-      <SPEC-ATTRIBUTES>
-        <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF" longName="Title"/>
-        <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF" longName="Description"/>
-        <ATTRIBUTE-DEFINITION-ENUMERATION identifier="STATUS_DEF" longName="Status">
-          <SPEC-ENUMERATION-LITERALS>
-            <ENUM-VALUE identifier="Draft" longName="Draft"/>
-            <ENUM-VALUE identifier="Review" longName="Review"/>
-            <ENUM-VALUE identifier="Approved" longName="Approved"/>
-          </SPEC-ENUMERATION-LITERALS>
-        </ATTRIBUTE-DEFINITION-ENUMERATION>
-        <ATTRIBUTE-DEFINITION-STRING identifier="PRIORITY_DEF" longName="Priority"/>
-      </SPEC-ATTRIBUTES>
 
-      <!-- Object Types -->
-      <SPEC-OBJECT-TYPES>
-        <SPEC-OBJECT-TYPE identifier="SEC_TYPE" longName="Section Type">
+      <!-- DATATYPES -->
+      <DATATYPES>
+        <DATATYPE-DEFINITION-STRING IDENTIFIER="DT_STRING" LONG-NAME="String"/>
+        <DATATYPE-DEFINITION-XHTML IDENTIFIER="DT_XHTML" LONG-NAME="XHTML"/>
+        <DATATYPE-DEFINITION-INTEGER IDENTIFIER="DT_INTEGER" LONG-NAME="Integer"/>
+        <DATATYPE-DEFINITION-BOOLEAN IDENTIFIER="DT_BOOLEAN" LONG-NAME="Boolean"/>
+        <DATATYPE-DEFINITION-ENUMERATION IDENTIFIER="DT_PRIORITY" LONG-NAME="Priority">
+          <SPEC-ENUMS>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_HIGH" LONG-NAME="High"/>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_MEDIUM" LONG-NAME="Medium"/>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_LOW" LONG-NAME="Low"/>
+          </SPEC-ENUMS>
+        </DATATYPE-DEFINITION-ENUMERATION>
+        <DATATYPE-DEFINITION-ENUMERATION IDENTIFIER="DT_STATUS" LONG-NAME="Status">
+          <SPEC-ENUMS>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_OPEN" LONG-NAME="Open"/>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_INPROGRESS" LONG-NAME="In Progress"/>
+            <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_CLOSED" LONG-NAME="Closed"/>
+          </SPEC-ENUMS>
+        </DATATYPE-DEFINITION-ENUMERATION>
+      </DATATYPES>
+
+      <!-- SPEC OBJECT TYPES -->
+      <SPEC-TYPES>
+        <SPEC-OBJECT-TYPE IDENTIFIER="REQ_TYPE" LONG-NAME="Requirement Type">
           <SPEC-ATTRIBUTES>
-            <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF"/>
-            <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="ID_DEF" LONG-NAME="ID" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="TITLE_DEF" LONG-NAME="Title" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-XHTML IDENTIFIER="DESC_DEF" LONG-NAME="Description" TYPE="DT_XHTML"/>
+            <ATTRIBUTE-DEFINITION-INTEGER IDENTIFIER="EST_DEF" LONG-NAME="Estimated Effort" TYPE="DT_INTEGER"/>
+            <ATTRIBUTE-DEFINITION-BOOLEAN IDENTIFIER="CRITICAL_DEF" LONG-NAME="Critical" TYPE="DT_BOOLEAN"/>
+            <ATTRIBUTE-DEFINITION-ENUMERATION IDENTIFIER="PRIORITY_DEF" LONG-NAME="Priority" TYPE="DT_PRIORITY"/>
+            <ATTRIBUTE-DEFINITION-ENUMERATION IDENTIFIER="STATUS_DEF" LONG-NAME="Status" TYPE="DT_STATUS"/>
           </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
-        <SPEC-OBJECT-TYPE identifier="REQ_TYPE" longName="Requirement Type">
-          <SPEC-ATTRIBUTES>
-            <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF"/>
-            <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF"/>
-            <ATTRIBUTE-DEFINITION-ENUMERATION identifier="STATUS_DEF"/>
-            <ATTRIBUTE-DEFINITION-STRING identifier="PRIORITY_DEF"/>
-          </SPEC-ATTRIBUTES>
-        </SPEC-OBJECT-TYPE>
-      </SPEC-OBJECT-TYPES>
+      </SPEC-TYPES>
 
-      <!-- Sections -->
-      <SPEC-OBJECT identifier="SEC-1" type="SEC_TYPE">
-        <VALUES>
-          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
-            <THE-VALUE>Authentication Module</THE-VALUE>
-          </ATTRIBUTE-VALUE-STRING>
-          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
-            <THE-VALUE>
-              <xhtml:div>
-                This section contains all requirements related to user authentication.
-              </xhtml:div>
-            </THE-VALUE>
-          </ATTRIBUTE-VALUE-XHTML>
-        </VALUES>
-        <CHILDREN>
-          <SPEC-OBJECT identifier="REQ-101" type="REQ_TYPE"/>
-          <SPEC-OBJECT identifier="REQ-102" type="REQ_TYPE"/>
-        </CHILDREN>
-      </SPEC-OBJECT>
+      <!-- SPEC OBJECTS -->
+      <SPEC-OBJECTS>
+        <SPEC-OBJECT IDENTIFIER="REQ_1" TYPE="REQ_TYPE">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>ID_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>REQ-1</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>TITLE_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>Brake System Response</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-XHTML>
+              <DEFINITION><ATTRIBUTE-DEFINITION-XHTML-REF>DESC_DEF</ATTRIBUTE-DEFINITION-XHTML-REF></DEFINITION>
+              <THE-VALUE><xhtml:div>The brake system shall respond within 100ms of pedal actuation.</xhtml:div></THE-VALUE>
+            </ATTRIBUTE-VALUE-XHTML>
+            <ATTRIBUTE-VALUE-INTEGER>
+              <DEFINITION><ATTRIBUTE-DEFINITION-INTEGER-REF>EST_DEF</ATTRIBUTE-DEFINITION-INTEGER-REF></DEFINITION>
+              <THE-VALUE>5</THE-VALUE>
+            </ATTRIBUTE-VALUE-INTEGER>
+            <ATTRIBUTE-VALUE-BOOLEAN>
+              <DEFINITION><ATTRIBUTE-DEFINITION-BOOLEAN-REF>CRITICAL_DEF</ATTRIBUTE-DEFINITION-BOOLEAN-REF></DEFINITION>
+              <THE-VALUE>true</THE-VALUE>
+            </ATTRIBUTE-VALUE-BOOLEAN>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_HIGH</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_OPEN</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+          </VALUES>
+        </SPEC-OBJECT>
 
-      <!-- Requirements -->
-      <SPEC-OBJECT identifier="REQ-101" type="REQ_TYPE">
-        <VALUES>
-          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
-            <THE-VALUE>User Login</THE-VALUE>
-          </ATTRIBUTE-VALUE-STRING>
-          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
-            <THE-VALUE>
-              <xhtml:div>
-                The system shall allow users to log in using a username and password.
-                <xhtml:p>Passwords must be stored securely using encryption.</xhtml:p>
-              </xhtml:div>
-            </THE-VALUE>
-          </ATTRIBUTE-VALUE-XHTML>
-          <ATTRIBUTE-VALUE-ENUMERATION definition="STATUS_DEF">
-            <THE-VALUE>Draft</THE-VALUE>
-          </ATTRIBUTE-VALUE-ENUMERATION>
-          <ATTRIBUTE-VALUE-STRING definition="PRIORITY_DEF">
-            <THE-VALUE>High</THE-VALUE>
-          </ATTRIBUTE-VALUE-STRING>
-        </VALUES>
-        <CHILDREN/>
-      </SPEC-OBJECT>
+        <!-- Child requirement REQ_1.1 -->
+        <SPEC-OBJECT IDENTIFIER="REQ_1_1" TYPE="REQ_TYPE">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>ID_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>REQ-1.1</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>TITLE_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>Brake Pedal Sensor Accuracy</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-XHTML>
+              <DEFINITION><ATTRIBUTE-DEFINITION-XHTML-REF>DESC_DEF</ATTRIBUTE-DEFINITION-XHTML-REF></DEFINITION>
+              <THE-VALUE><xhtml:div>The brake pedal sensor shall detect pedal position with ±1mm accuracy.</xhtml:div></THE-VALUE>
+            </ATTRIBUTE-VALUE-XHTML>
+            <ATTRIBUTE-VALUE-INTEGER>
+              <DEFINITION><ATTRIBUTE-DEFINITION-INTEGER-REF>EST_DEF</ATTRIBUTE-DEFINITION-INTEGER-REF></DEFINITION>
+              <THE-VALUE>3</THE-VALUE>
+            </ATTRIBUTE-VALUE-INTEGER>
+            <ATTRIBUTE-VALUE-BOOLEAN>
+              <DEFINITION><ATTRIBUTE-DEFINITION-BOOLEAN-REF>CRITICAL_DEF</ATTRIBUTE-DEFINITION-BOOLEAN-REF></DEFINITION>
+              <THE-VALUE>true</THE-VALUE>
+            </ATTRIBUTE-VALUE-BOOLEAN>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_HIGH</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_OPEN</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+          </VALUES>
+        </SPEC-OBJECT>
 
-      <SPEC-OBJECT identifier="REQ-102" type="REQ_TYPE">
-        <VALUES>
-          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
-            <THE-VALUE>Account Lockout</THE-VALUE>
-          </ATTRIBUTE-VALUE-STRING>
-          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
-            <THE-VALUE>
-              <xhtml:div>
-                The login process shall lock the account after 5 failed attempts.
-                <xhtml:p>An admin must reset the account before the user can log in again.</xhtml:p>
-              </xhtml:div>
-            </THE-VALUE>
-          </ATTRIBUTE-VALUE-XHTML>
-          <ATTRIBUTE-VALUE-ENUMERATION definition="STATUS_DEF">
-            <THE-VALUE>Approved</THE-VALUE>
-          </ATTRIBUTE-VALUE-ENUMERATION>
-          <ATTRIBUTE-VALUE-STRING definition="PRIORITY_DEF">
-            <THE-VALUE>Medium</THE-VALUE>
-          </ATTRIBUTE-VALUE-STRING>
-        </VALUES>
-        <CHILDREN/>
-      </SPEC-OBJECT>
+        <SPEC-OBJECT IDENTIFIER="REQ_2" TYPE="REQ_TYPE">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>ID_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>REQ-2</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>TITLE_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>Steering Control Accuracy</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-XHTML>
+              <DEFINITION><ATTRIBUTE-DEFINITION-XHTML-REF>DESC_DEF</ATTRIBUTE-DEFINITION-XHTML-REF></DEFINITION>
+              <THE-VALUE><xhtml:div>The steering shall respond accurately within 50ms delay.</xhtml:div></THE-VALUE>
+            </ATTRIBUTE-VALUE-XHTML>
+            <ATTRIBUTE-VALUE-INTEGER>
+              <DEFINITION><ATTRIBUTE-DEFINITION-INTEGER-REF>EST_DEF</ATTRIBUTE-DEFINITION-INTEGER-REF></DEFINITION>
+              <THE-VALUE>8</THE-VALUE>
+            </ATTRIBUTE-VALUE-INTEGER>
+            <ATTRIBUTE-VALUE-BOOLEAN>
+              <DEFINITION><ATTRIBUTE-DEFINITION-BOOLEAN-REF>CRITICAL_DEF</ATTRIBUTE-DEFINITION-BOOLEAN-REF></DEFINITION>
+              <THE-VALUE>false</THE-VALUE>
+            </ATTRIBUTE-VALUE-BOOLEAN>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_MEDIUM</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_INPROGRESS</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+          </VALUES>
+        </SPEC-OBJECT>
 
-      <!-- Trace Links -->
-      <SPEC-RELATIONSHIPS>
-        <SPEC-RELATIONSHIP identifier="REL-1">
-          <SOURCE>REQ-102</SOURCE>
-          <TARGET>REQ-101</TARGET>
-          <TYPE>DependsOn</TYPE>
-        </SPEC-RELATIONSHIP>
-      </SPEC-RELATIONSHIPS>
+        <!-- Child requirement REQ_2.1 -->
+        <SPEC-OBJECT IDENTIFIER="REQ_2_1" TYPE="REQ_TYPE">
+          <VALUES>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>ID_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>REQ-2.1</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-STRING>
+              <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>TITLE_DEF</ATTRIBUTE-DEFINITION-STRING-REF></DEFINITION>
+              <THE-VALUE>Steering Angle Sensor Precision</THE-VALUE>
+            </ATTRIBUTE-VALUE-STRING>
+            <ATTRIBUTE-VALUE-XHTML>
+              <DEFINITION><ATTRIBUTE-DEFINITION-XHTML-REF>DESC_DEF</ATTRIBUTE-DEFINITION-XHTML-REF></DEFINITION>
+              <THE-VALUE><xhtml:div>The steering angle sensor shall provide precision within ±0.5 degrees.</xhtml:div></THE-VALUE>
+            </ATTRIBUTE-VALUE-XHTML>
+            <ATTRIBUTE-VALUE-INTEGER>
+              <DEFINITION><ATTRIBUTE-DEFINITION-INTEGER-REF>EST_DEF</ATTRIBUTE-DEFINITION-INTEGER-REF></DEFINITION>
+              <THE-VALUE>4</THE-VALUE>
+            </ATTRIBUTE-VALUE-INTEGER>
+            <ATTRIBUTE-VALUE-BOOLEAN>
+              <DEFINITION><ATTRIBUTE-DEFINITION-BOOLEAN-REF>CRITICAL_DEF</ATTRIBUTE-DEFINITION-BOOLEAN-REF></DEFINITION>
+              <THE-VALUE>false</THE-VALUE>
+            </ATTRIBUTE-VALUE-BOOLEAN>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>PRIORITY_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_MEDIUM</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+            <ATTRIBUTE-VALUE-ENUMERATION>
+              <DEFINITION><ATTRIBUTE-DEFINITION-ENUMERATION-REF>STATUS_DEF</ATTRIBUTE-DEFINITION-ENUMERATION-REF></DEFINITION>
+              <THE-VALUE><ENUM-REF>ENUM_INPROGRESS</ENUM-REF></THE-VALUE>
+            </ATTRIBUTE-VALUE-ENUMERATION>
+          </VALUES>
+        </SPEC-OBJECT>
+
+      </SPEC-OBJECTS>
+
+      <!-- SPECIFICATIONS -->
+      <SPECIFICATIONS>
+        <SPECIFICATION IDENTIFIER="SPEC_1" LONG-NAME="Vehicle Requirements">
+          <CHILDREN>
+            <SPEC-HIERARCHY>
+              <OBJECT>
+                <SPEC-OBJECT-REF>REQ_1</SPEC-OBJECT-REF>
+                <CHILDREN>
+                  <SPEC-HIERARCHY>
+                    <OBJECT><SPEC-OBJECT-REF>REQ_1_1</SPEC-OBJECT-REF></OBJECT>
+                  </SPEC-HIERARCHY>
+                </CHILDREN>
+              </OBJECT>
+              <OBJECT>
+                <SPEC-OBJECT-REF>REQ_2</SPEC-OBJECT-REF>
+                <CHILDREN>
+                  <SPEC-HIERARCHY>
+                    <OBJECT><SPEC-OBJECT-REF>REQ_2_1</SPEC-OBJECT-REF></OBJECT>
+                  </SPEC-HIERARCHY>
+                </CHILDREN>
+              </OBJECT>
+            </SPEC-HIERARCHY>
+          </CHILDREN>
+        </SPECIFICATION>
+      </SPECIFICATIONS>
 
     </REQ-IF-CONTENT>
   </CORE-CONTENT>
 </REQ-IF>
+  
