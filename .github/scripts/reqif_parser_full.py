@@ -907,14 +907,15 @@ class ReqIFParser:
         return value
 
     # --- UPDATED METHOD: Correctly extracts all value types (FIXED) ---
+    # --- UPDATED METHOD: Correctly extracts all value types (FIXED) ---
     def _extract_value(self, attr):
         
         tag = local_tag(attr)
         
         # 1. Standard value types using <THE-VALUE>
         if tag in ("ATTRIBUTE-VALUE-STRING", "ATTRIBUTE-VALUE-INTEGER", 
-                   "ATTRIBUTE-VALUE-BOOLEAN", "ATTRIBUTE-VALUE-DATE", 
-                   "ATTRIBUTE-VALUE-REAL"):
+                    "ATTRIBUTE-VALUE-BOOLEAN", "ATTRIBUTE-VALUE-DATE", 
+                    "ATTRIBUTE-VALUE-REAL"):
             value_elem = self._find(attr, "THE-VALUE")
             if value_elem is not None:
                 # Boolean value is stored as an XML attribute in <THE-VALUE>
@@ -923,14 +924,26 @@ class ReqIFParser:
                 # Other simple types use text content
                 return text_of(value_elem)
 
-        # 2. XHTML Content
+        # 2. XHTML Content (FIXED for standard, namespaced tags)
         elif tag == "ATTRIBUTE-VALUE-XHTML":
             value_elem = self._find(attr, "THE-VALUE")
             if value_elem is not None:
-                # Find the actual XHTML root (usually <div> or <p>)
-                xhtml_root = find_first_child_local(value_elem, "div") or find_first_child_local(value_elem, "p")
                 
-                # If XHTML root found, clean it
+                # --- START FIX: STANDARD APPROACH (Namespaced XHTML) ---
+                # 1. Try to find the standard, namespaced tag (<xhtml:div> or <xhtml:p>) 
+                #    using the registered namespace map (self.ns).
+                xhtml_root = value_elem.find("xhtml:div", self.ns)
+                if xhtml_root is None:
+                    xhtml_root = value_elem.find("xhtml:p", self.ns)
+                # --- END FIX ---
+
+                # 2. VENDOR CORNER CASE FALLBACK (Original Logic Preserved)
+                # If standard search failed, fall back to namespace-agnostic search (vendor case).
+                if xhtml_root is None:
+                    # Find the actual XHTML root (usually <div> or <p>)
+                    xhtml_root = find_first_child_local(value_elem, "div") or find_first_child_local(value_elem, "p")
+                
+                # If XHTML root found (from either standard or vendor logic), clean it
                 if xhtml_root is not None:
                     return clean_xhtml_to_text(xhtml_root)
                 
