@@ -166,10 +166,20 @@ def update_issue(repo, token, issue_number, req):
 
 
 def close_issue(repo, token, issue_number, req_id):
-    data = {"state": "closed"}
-    resp = requests.patch(f"{GITHUB_API_URL}/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
-    if resp.status_code >= 300:
-        print(f"❌ Failed to close issue #{issue_number}: {resp.text}")
+    # 'repo' is the full name, e.g., 'owner/repo-name'
+    
+    # FIX: Added '/repos' to the API path
+    url = f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}"
+    
+    data = {
+        "state": "closed",
+        "state_reason": "not_planned" # Good practice for removed requirements
+    }
+    
+    resp = requests.patch(url, headers=github_headers(token), json=data)
+    
+    if resp.status_code >= 400: # Check for 4xx errors (404 Not Found is likely)
+        print(f"❌ Failed to close issue #{issue_number} (Status: {resp.status_code}). Response: {resp.text}")
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
 
