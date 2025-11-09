@@ -1,141 +1,118 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
-
-  <THE-HEADER>
-    <REQ-IF-HEADER>
-      <REQ-IF-VERSION>1.0</REQ-IF-VERSION>
-      <REQ-IF-TOOL-ID>IBM Rational DOORS</REQ-IF-TOOL-ID>
-      <REQ-IF-TOOL-VERSION>9.7.0</REQ-IF-TOOL-VERSION>
-      <CREATION-TIME>2025-01-15T10:00:00Z</CREATION-TIME>
-    </REQ-IF-HEADER>
-  </THE-HEADER>
-
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        identifier="REQIF-SAMPLE-001"
+        version="1.0">
   <CORE-CONTENT>
     <REQ-IF-CONTENT>
+      <!-- Attribute Definitions -->
+      <SPEC-ATTRIBUTES>
+        <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF" longName="Title"/>
+        <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF" longName="Description"/>
+        <ATTRIBUTE-DEFINITION-ENUMERATION identifier="STATUS_DEF" longName="Status">
+          <SPEC-ENUMERATION-LITERALS>
+            <ENUM-VALUE identifier="Draft" longName="Draft"/>
+            <ENUM-VALUE identifier="Review" longName="Review"/>
+            <ENUM-VALUE identifier="Approved" longName="Approved"/>
+          </SPEC-ENUMERATION-LITERALS>
+        </ATTRIBUTE-DEFINITION-ENUMERATION>
+        <ATTRIBUTE-DEFINITION-STRING identifier="PRIORITY_DEF" longName="Priority"/>
+      </SPEC-ATTRIBUTES>
 
-      <!-- DATATYPES -->
-      <DATATYPES>
-        <DATATYPE-DEFINITION-STRING IDENTIFIER="DT_STRING" MAX-LENGTH="32767"/>
-        <DATATYPE-DEFINITION-XHTML IDENTIFIER="DT_XHTML"/>
-        <DATATYPE-DEFINITION-ENUMERATION IDENTIFIER="DT_STATUS">
-          <SPECIFIED-VALUES>
-            <ENUM-VALUE IDENTIFIER="STAT_DRAFT">
-              <LONG-NAME>Draft</LONG-NAME>
-            </ENUM-VALUE>
-            <ENUM-VALUE IDENTIFIER="STAT_APPROVED">
-              <LONG-NAME>Approved</LONG-NAME>
-            </ENUM-VALUE>
-            <ENUM-VALUE IDENTIFIER="STAT_REJECTED">
-              <LONG-NAME>Rejected</LONG-NAME>
-            </ENUM-VALUE>
-          </SPECIFIED-VALUES>
-        </DATATYPE-DEFINITION-ENUMERATION>
-      </DATATYPES>
-
-      <!-- SPEC OBJECT TYPES -->
+      <!-- Object Types -->
       <SPEC-OBJECT-TYPES>
-
-        <!-- Section / Heading Type -->
-        <SPEC-OBJECT-TYPE IDENTIFIER="TYPE_SECTION">
-          <LONG-NAME>Section</LONG-NAME>
+        <SPEC-OBJECT-TYPE identifier="SEC_TYPE" longName="Section Type">
           <SPEC-ATTRIBUTES>
-            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="TITLE_DEF" TYPE="DT_STRING"/>
+            <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF"/>
+            <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF"/>
           </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
-
-        <!-- Requirement Type -->
-        <SPEC-OBJECT-TYPE IDENTIFIER="TYPE_REQUIREMENT">
-          <LONG-NAME>Requirement</LONG-NAME>
+        <SPEC-OBJECT-TYPE identifier="REQ_TYPE" longName="Requirement Type">
           <SPEC-ATTRIBUTES>
-            <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="ID_DEF" TYPE="DT_STRING"/>
-            <ATTRIBUTE-DEFINITION-XHTML IDENTIFIER="DESC_DEF" TYPE="DT_XHTML"/>
-            <ATTRIBUTE-DEFINITION-ENUMERATION IDENTIFIER="STATUS_DEF" TYPE="DT_STATUS"/>
+            <ATTRIBUTE-DEFINITION-STRING identifier="TITLE_DEF"/>
+            <ATTRIBUTE-DEFINITION-XHTML identifier="DESC_DEF"/>
+            <ATTRIBUTE-DEFINITION-ENUMERATION identifier="STATUS_DEF"/>
+            <ATTRIBUTE-DEFINITION-STRING identifier="PRIORITY_DEF"/>
           </SPEC-ATTRIBUTES>
         </SPEC-OBJECT-TYPE>
-
       </SPEC-OBJECT-TYPES>
 
-      <!-- SPEC OBJECTS -->
-      <SPEC-OBJECTS>
+      <!-- Sections -->
+      <SPEC-OBJECT identifier="SEC-1" type="SEC_TYPE">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
+            <THE-VALUE>Authentication Module</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
+            <THE-VALUE>
+              <xhtml:div>
+                This section contains all requirements related to user authentication.
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+        </VALUES>
+        <CHILDREN>
+          <SPEC-OBJECT identifier="REQ-101" type="REQ_TYPE"/>
+          <SPEC-OBJECT identifier="REQ-102" type="REQ_TYPE"/>
+        </CHILDREN>
+      </SPEC-OBJECT>
 
-        <!-- Section -->
-        <SPEC-OBJECT IDENTIFIER="SEC-1" TYPE="TYPE_SECTION">
-          <VALUES>
-            <ATTRIBUTE-VALUE-STRING ATTRIBUTE-DEFINITION="TITLE_DEF" THE-VALUE="1. User Authentication"/>
-          </VALUES>
-        </SPEC-OBJECT>
+      <!-- Requirements -->
+      <SPEC-OBJECT identifier="REQ-101" type="REQ_TYPE">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
+            <THE-VALUE>User Login</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
+            <THE-VALUE>
+              <xhtml:div>
+                The system shall allow users to log in using a username and password.
+                <xhtml:p>Passwords must be stored securely using encryption.</xhtml:p>
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+          <ATTRIBUTE-VALUE-ENUMERATION definition="STATUS_DEF">
+            <THE-VALUE>Draft</THE-VALUE>
+          </ATTRIBUTE-VALUE-ENUMERATION>
+          <ATTRIBUTE-VALUE-STRING definition="PRIORITY_DEF">
+            <THE-VALUE>High</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+        </VALUES>
+        <CHILDREN/>
+      </SPEC-OBJECT>
 
-        <!-- Requirement under section -->
-        <SPEC-OBJECT IDENTIFIER="REQ-100" TYPE="TYPE_REQUIREMENT">
-          <VALUES>
-            <ATTRIBUTE-VALUE-STRING ATTRIBUTE-DEFINITION="ID_DEF" THE-VALUE="REQ-100"/>
-            <ATTRIBUTE-VALUE-XHTML ATTRIBUTE-DEFINITION="DESC_DEF">
-              <THE-VALUE>
-                <xhtml:div>
-                  The system shall authenticate users
-                  <b>using a username and password</b>.
-                </xhtml:div>
-              </THE-VALUE>
-            </ATTRIBUTE-VALUE-XHTML>
-            <ATTRIBUTE-VALUE-ENUMERATION ATTRIBUTE-DEFINITION="STATUS_DEF">
-              <VALUES>
-                <ENUM-VALUE-REF>STAT_DRAFT</ENUM-VALUE-REF>
-              </VALUES>
-            </ATTRIBUTE-VALUE-ENUMERATION>
-          </VALUES>
-        </SPEC-OBJECT>
+      <SPEC-OBJECT identifier="REQ-102" type="REQ_TYPE">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING definition="TITLE_DEF">
+            <THE-VALUE>Account Lockout</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML definition="DESC_DEF">
+            <THE-VALUE>
+              <xhtml:div>
+                The login process shall lock the account after 5 failed attempts.
+                <xhtml:p>An admin must reset the account before the user can log in again.</xhtml:p>
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+          <ATTRIBUTE-VALUE-ENUMERATION definition="STATUS_DEF">
+            <THE-VALUE>Approved</THE-VALUE>
+          </ATTRIBUTE-VALUE-ENUMERATION>
+          <ATTRIBUTE-VALUE-STRING definition="PRIORITY_DEF">
+            <THE-VALUE>Medium</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+        </VALUES>
+        <CHILDREN/>
+      </SPEC-OBJECT>
 
-        <SPEC-OBJECT IDENTIFIER="REQ-110" TYPE="TYPE_REQUIREMENT">
-          <VALUES>
-            <ATTRIBUTE-VALUE-STRING ATTRIBUTE-DEFINITION="ID_DEF" THE-VALUE="REQ-110"/>
-            <ATTRIBUTE-VALUE-XHTML ATTRIBUTE-DEFINITION="DESC_DEF">
-              <THE-VALUE>
-                <xhtml:div>
-                  The login process shall lock the account after
-                  <i>5 failed attempts</i>.
-                </xhtml:div>
-              </THE-VALUE>
-            </ATTRIBUTE-VALUE-XHTML>
-            <ATTRIBUTE-VALUE-ENUMERATION ATTRIBUTE-DEFINITION="STATUS_DEF">
-              <VALUES>
-                <ENUM-VALUE-REF>STAT_APPROVED</ENUM-VALUE-REF>
-              </VALUES>
-            </ATTRIBUTE-VALUE-ENUMERATION>
-          </VALUES>
-        </SPEC-OBJECT>
-
-      </SPEC-OBJECTS>
-
-      <!-- HIERARCHY -->
-      <SPEC-HIERARCHIES>
-        <SPEC-HIERARCHY IDENTIFIER="H_SEC" OBJECT="SEC-1">
-          <CHILDREN>
-            <SPEC-HIERARCHY IDENTIFIER="H_REQ1" OBJECT="REQ-100"/>
-            <SPEC-HIERARCHY IDENTIFIER="H_REQ2" OBJECT="REQ-110"/>
-          </CHILDREN>
-        </SPEC-HIERARCHY>
-      </SPEC-HIERARCHIES>
-
-      <!-- SPECIFICATION -->
-      <SPECIFICATIONS>
-        <SPECIFICATION IDENTIFIER="SPEC_MAIN">
-          <LONG-NAME>Software System Requirements</LONG-NAME>
-          <CHILDREN>
-            <SPEC-HIERARCHY IDENTIFIER="H_SEC"/>
-          </CHILDREN>
-        </SPECIFICATION>
-      </SPECIFICATIONS>
-
-      <!-- TRACE RELATION: REQ-110 refines REQ-100 -->
-      <SPEC-RELATIONS>
-        <SPEC-RELATION IDENTIFIER="REL-1" TYPE="REQ_REL">
-          <SOURCE>REQ-110</SOURCE>
-          <TARGET>REQ-100</TARGET>
-        </SPEC-RELATION>
-      </SPEC-RELATIONS>
+      <!-- Trace Links -->
+      <SPEC-RELATIONSHIPS>
+        <SPEC-RELATIONSHIP identifier="REL-1">
+          <SOURCE>REQ-102</SOURCE>
+          <TARGET>REQ-101</TARGET>
+          <TYPE>DependsOn</TYPE>
+        </SPEC-RELATIONSHIP>
+      </SPEC-RELATIONSHIPS>
 
     </REQ-IF-CONTENT>
   </CORE-CONTENT>
 </REQ-IF>
-  

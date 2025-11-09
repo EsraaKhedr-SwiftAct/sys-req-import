@@ -111,11 +111,11 @@ def clean_xhtml_to_text(elem):
     txt = "".join(parts)
     # Replace any sequences of whitespace with single spaces except newlines; collapse multiple newlines
     # Normalize whitespace but keep line breaks:
-    #  - convert sequences of spaces/tabs to single space
-    #  - collapse 3+ newlines to 2
+    #  - convert sequences of spaces/tabs to single space
+    #  - collapse 3+ newlines to 2
     txt = re.sub(r'[ \t\f\v]+', ' ', txt)
     txt = re.sub(r'\r\n?', '\n', txt)
-    txt = re.sub(r'\n\s*\n\s*\n+', '\n\n', txt)  # keep up to double newline
+    txt = re.sub(r'\n\s*\n\s*\n+', '\n\n', txt) # keep up to double newline
     # strip spaces at line ends and ends of text
     lines = [line.rstrip() for line in txt.splitlines()]
     cleaned = "\n".join([ln.strip() for ln in lines if ln.strip() != ""])
@@ -169,8 +169,10 @@ class ReqIFParser:
         self.spec_object_types = self._build_spec_object_type_map()
 
         # Hierarchy and relations containers (populated in parse)
-        self.hierarchy_map = {}  # object_id -> [child_object_ids]
-        self.parent_map = {}     # object_id -> parent_object_id
+        # FIX: Central storage for unique, complete requirements
+        self.object_map: Dict[str, ReqIFRequirement] = {} 
+        self.hierarchy_map = {} # object_id -> [child_object_ids]
+        self.parent_map = {} # object_id -> parent_object_id
         self.relations: List[Dict[str, Any]] = []
 
         # Attachments storage when extract_attachments True
@@ -178,7 +180,7 @@ class ReqIFParser:
 
         print(f"✅ Definition map built ({len(self.def_map)} items):")
         for k, v in self.def_map.items():
-            print(f"   - {k} → {v}")
+            print(f"   - {k} → {v}")
         print(f"✅ Enumeration map built ({len(self.enum_map)} items).")
         # ----------------------------------
 
@@ -348,7 +350,7 @@ class ReqIFParser:
             type_elements = list(iter_elements_by_local_name(self.root, "SPEC-OBJECT-TYPE"))
 
         if not type_elements:
-            return type_map  # no type metadata → normal
+            return type_map # no type metadata → normal
 
         print(f"🧩 Found {len(type_elements)} SPEC-OBJECT-TYPE elements")
 
@@ -379,10 +381,95 @@ class ReqIFParser:
         return type_map
 
     # ------------------------------------------------------------
+    # Hierarchy and Specification Parsing
+    # ------------------------------------------------------------
+    def _parse_specifications_and_hierarchy(self, content):
+        print("🏗️ Building requirement hierarchy...")
+        
+        # 1. Find all SPEC-HIERARCHY elements (links objects)
+        all_hierarchies = self._findall(content, "SPEC-HIERARCHY")
+        
+        for hierarchy_node in all_hierarchies:
+            parent_ref_obj = hierarchy_node.find("reqif:OBJECT/reqif:SPEC-OBJECT-REF", self.ns)
+            
+            # Fallback for namespace-agnostic OBJECT/SPEC-OBJECT-REF find
+            if parent_ref_obj is None:
+                 obj_block = find_first_child_local(hierarchy_node, "OBJECT")
+                 if obj_block:
+                     parent_ref_obj = find_first_child_local(obj_block, "SPEC-OBJECT-REF")
+
+            parent_id = text_of(parent_ref_obj)
+            
+            if parent_id:
+                # 2. Find children within this hierarchy node
+                children_block = self._find(hierarchy_node, "CHILDREN")
+                if children_block is not None:
+                    self.hierarchy_map.setdefault(parent_id, [])
+                    
+                    for child_node in self._findall(children_block, "SPEC-HIERARCHY"):
+                        child_ref_obj = child_node.find("reqif:OBJECT/reqif:SPEC-OBJECT-REF", self.ns)
+                        
+                        # Fallback for namespace-agnostic OBJECT/SPEC-OBJECT-REF find
+                        if child_ref_obj is None:
+                            obj_block = find_first_child_local(child_node, "OBJECT")
+                            if obj_block:
+                                child_ref_obj = find_first_child_local(obj_block, "SPEC-OBJECT-REF")
+
+                        child_id = text_of(child_ref_obj)
+                        
+                        if child_id:
+                            self.hierarchy_map[parent_id].append(child_id)
+                            self.parent_map[child_id] = parent_id
+        
+        print(f"✅ Hierarchy map built ({len(self.hierarchy_map)} parents).")
+
+
+    # ------------------------------------------------------------
+    # Relation Parsing
+    # ------------------------------------------------------------
+    def _parse_relations(self, content):
+        print("🔗 Parsing relations...")
+        
+        # ReqIF 1.0/1.1 uses SPEC-RELATIONS, DOORS Next uses SPEC-RELATIONSHIPS
+        relation_blocks = self._findall(content, "SPEC-RELATION") + self._findall(content, "SPEC-RELATIONSHIP")
+        
+        for rel in relation_blocks:
+            source = None
+            target = None
+            rtype = rel.get("LONG-NAME") or rel.get("longName") or rel.get("IDENTIFIER") or local_tag(rel)
+            
+            # 1. Find SOURCE and TARGET
+            source_ref = self._find(rel, "SOURCE/SPEC-OBJECT-REF") or self._find(rel, "SOURCE/SPEC-OBJECT/SPEC-OBJECT-REF")
+            target_ref = self._find(rel, "TARGET/SPEC-OBJECT-REF") or self._find(rel, "TARGET/SPEC-OBJECT/SPEC-OBJECT-REF")
+
+            source = text_of(source_ref)
+            target = text_of(target_ref)
+            
+            # 2. Fallback for vendor-specific relation structures (e.g., direct child text)
+            if not source and not target:
+                for child in list(rel):
+                    t = local_tag(child)
+                    if t.upper() == "SOURCE" and text_of(child):
+                        source = text_of(child)
+                    elif t.upper() == "TARGET" and text_of(child):
+                        target = text_of(child)
+                    elif t.upper() == "TYPE": # Type reference lookup
+                        type_ref_id = text_of(child)
+                        # Use self.def_map (which holds LONG-NAMEs) if available, otherwise fallback to ID
+                        if type_ref_id:
+                            rtype = self.def_map.get(type_ref_id) or type_ref_id
+            
+            if source and target:
+                relation = {"source": source, "target": target, "type": rtype}
+                self.relations.append(relation)
+
+        print(f"✅ Found {len(self.relations)} relations.")
+
+    # ------------------------------------------------------------
     # Main parse entry
     # ------------------------------------------------------------
     def parse(self) -> List[ReqIFRequirement]:
-        reqs: List[ReqIFRequirement] = []
+        
         # Finding REQ-IF-CONTENT: namespace-aware then fallback local-name
         content = self.root.find("reqif:CORE-CONTENT/reqif:REQ-IF-CONTENT", self.ns)
         if content is None:
@@ -405,7 +492,15 @@ class ReqIFParser:
         print(f"📄 Found {len(spec_objects)} SPEC-OBJECT elements")
 
         for spec_obj in spec_objects:
-            identifier = spec_obj.get("IDENTIFIER") or spec_obj.get("ID") or "UNKNOWN"
+            # 1. Standard ReqIF: uppercase IDENTIFIER or ID
+            identifier = spec_obj.get("IDENTIFIER") or spec_obj.get("ID")
+            
+            # 2. Vendor Corner Case: Check for lowercase 'identifier' or 'id' (FIXED)
+            identifier = identifier or spec_obj.get("identifier") or spec_obj.get("id") 
+
+            # 3. Final fallback
+            identifier = identifier or "UNKNOWN"
+            
             print(f"\n🔹 Parsing SPEC-OBJECT: {identifier}")
 
             # --- Collect attributes ---
@@ -414,7 +509,7 @@ class ReqIFParser:
             # attach hierarchy info if found
             children = self.hierarchy_map.get(identifier, [])
             if children:
-                print(f"   → Has children: {children}")
+                print(f"   → Has children: {children}")
                 attributes["__children__"] = children
             parent = self.parent_map.get(identifier)
             if parent:
@@ -435,19 +530,41 @@ class ReqIFParser:
             if self.extract_attachments and identifier in self.attachments:
                 attributes["__attachments__"] = self.attachments.get(identifier)
 
-            print(f"   Attributes found: {list(attributes.keys())}")
+            print(f"   Attributes found: {list(attributes.keys())}")
 
             title = self._find_flexible(attributes, ["Title", "Name", "Req Title", "Requirement"])
             description = self._find_flexible(attributes, ["Description", "Desc", "Text", "Body", "Content"])
             # Auto-generate title from description if missing
             if not title and description:
                 title = self._auto_title_from_description(description)
-                print(f"   → Auto-generated Title from Description: {title!r}")
-            print(f"   → Detected Title: {title!r}")
-            print(f"   → Detected Description: {description!r}")
+                print(f"   → Auto-generated Title from Description: {title!r}")
+            print(f"   → Detected Title: {title!r}")
+            print(f"   → Detected Description: {description!r}")
+            
+            current_req = ReqIFRequirement(identifier, title, description, attributes)
 
-            reqs.append(ReqIFRequirement(identifier, title, description, attributes))
-        return reqs
+            # --- FIX for Duplication and Placeholder Objects (Vendor Corner Case) ---
+            if identifier in self.object_map:
+                existing_req = self.object_map[identifier]
+                
+                # Heuristic: The object with more attributes, or a title/description is preferred.
+                is_more_complete = len(current_req.attributes) > len(existing_req.attributes)
+                is_more_complete = is_more_complete or (current_req.description and not existing_req.description)
+                is_more_complete = is_more_complete or (current_req.title and not existing_req.title)
+
+                if is_more_complete:
+                    self.object_map[identifier] = current_req
+                    print(f"   → UPDATED {identifier} in map (more attributes/data found).")
+                else:
+                    # Logic to SKIPPED, ensuring the more complete version (which should already be in the map) is kept.
+                    print(f"   → SKIPPED update for {identifier} (existing is more complete).")
+                    
+            else:
+                self.object_map[identifier] = current_req
+            # --- END FIX ---
+
+
+        return list(self.object_map.values()) # RETURN from the cleaned map
 
     # -------------------------------------------------------
     # Collect attribute values with many vendor fallbacks
@@ -498,13 +615,18 @@ class ReqIFParser:
                     found = list(iter_elements_by_local_name(values_block, tag))
                 all_attrs += found
 
-        print(f"   → Found {len(all_attrs)} clean ATTRIBUTE-VALUE elements")
+        print(f"   → Found {len(all_attrs)} clean ATTRIBUTE-VALUE elements")
 
         for attr in all_attrs:
             # Acquire attribute definition identifier by several vendor patterns
 
             # 1) Polarion-style attribute as XML attribute
             ref_id = attr.get("ATTRIBUTE-DEFINITION")
+
+            # --- FIX START: Check for direct 'definition' attribute (e.g., in DOORS Next) ---
+            if not ref_id:
+                ref_id = attr.get("definition") or attr.get("DEFINITION")
+            # --- FIX END ---
 
             # 2) Standard nested DEFINITION child: <DEFINITION><ATTRIBUTE-DEFINITION-STRING-REF>AD_TITLE</...>
             if not ref_id:
@@ -524,6 +646,9 @@ class ReqIFParser:
                                         break
                                 if ref_id:
                                     break
+                        if ref_id:
+                            pass # Found via local-name fallback
+                        
                 else:
                     if def_child.text and def_child.text.strip():
                         ref_id = def_child.text.strip()
@@ -552,46 +677,51 @@ class ReqIFParser:
                     if known_id and known_id in text_nodes:
                         ref_id = known_id
                         break
-            if not ref_id:
-                # ✅ Phase-2 ENUM / Missing Definition Recovery
-                obj_type = spec_obj.get("TYPE") or spec_obj.get("type")
-                if obj_type and obj_type in self.spec_object_types:
-                    candidate_defs = self.spec_object_types[obj_type]
+                if not ref_id:
+                    # ✅ Phase-2 ENUM / Missing Definition Recovery
+                    obj_type = spec_obj.get("TYPE") or spec_obj.get("type")
+                    if obj_type and obj_type in self.spec_object_types:
+                        candidate_defs = self.spec_object_types[obj_type]
 
-                    # Try to infer which attribute definition this ENUM belongs to
-                    for cand in candidate_defs:
-                        if cand in self.def_map:
-                            inferred_name = self.def_map.get(cand) or cand
-                            print(f"      🔄 Inferred missing attribute definition: {inferred_name} (from type {obj_type})")
-                            ref_id = cand
-                            attr_name = inferred_name
-                            value = self._extract_value(attr)
-                            attrs[attr_name] = value
-                            break
+                        # Try to infer which attribute definition this ENUM belongs to
+                        for cand in candidate_defs:
+                            if cand in self.def_map:
+                                inferred_name = self.def_map.get(cand) or cand
+                                print(f"      🔄 Inferred missing attribute definition: {inferred_name} (from type {obj_type})")
+                                ref_id = cand
+                                attr_name = inferred_name
+                                value = self._extract_value(attr)
+                                attrs[attr_name] = value
+                                break
 
-                if ref_id:
-                    continue  # ✅ Re-enter normal attribute processing flow
+                        if ref_id:
+                            continue # ✅ Re-enter normal attribute processing flow
 
-                # ❗ If still no match → fall back safely
-                fallback_key = local_tag(attr)
-                val = self._extract_value(attr)
+                        # ❗ If still no match → fall back safely
+                        fallback_key = local_tag(attr)
+                        val = self._extract_value(attr)
 
-                # ✅ If string and looks like requirement text → treat as Description
-                if fallback_key == "ATTRIBUTE-VALUE-STRING":
-                    # If there is already a Description, this becomes Title
-                    if "Description" not in attrs:
-                        print("      🔄 Inferred attribute as Description")
-                        attrs["Description"] = val
-                    else:
-                        print("      🔄 Inferred attribute as Title")
-                        attrs["Title"] = val
-                    continue
+                        # ✅ Fallback: If STRING or XHTML, infer as Description/Title. Prioritize XHTML for Description.
+                        if fallback_key in ["ATTRIBUTE-VALUE-STRING", "ATTRIBUTE-VALUE-XHTML"]:
+                            # 1. Prioritize XHTML for Description if not already set.
+                            if fallback_key == "ATTRIBUTE-VALUE-XHTML" and "Description" not in attrs:
+                                print(" 🔄 Inferred attribute as Description (XHTML content fallback)")
+                                attrs["Description"] = val
+                                continue
+                            
+                            # 2. Use the remaining string/xhtml for Description or Title.
+                            if "Description" not in attrs:
+                                print(" 🔄 Inferred attribute as Description (STRING/XHTML fallback)")
+                                attrs["Description"] = val
+                            else:
+                                print(" 🔄 Inferred attribute as Title (STRING/XHTML fallback)")
+                                attrs["Title"] = val
+                            continue
 
-                print(f"      ⚠️ Could not resolve attribute definition; fallback key: {fallback_key}")
-                attrs[fallback_key] = val
-                continue
-
-
+                        # 3. Default fallback for all unhandled types (preserves raw tag name)
+                        print(f" ⚠️ Could not resolve attribute definition; fallback key: {fallback_key}")
+                        attrs[fallback_key] = val
+                        continue
 
 
             # Get the Attribute's Long Name (if available) or use ref_id
@@ -617,35 +747,34 @@ class ReqIFParser:
             if value is None:
                 value = ""
 
-            print(f"      DEF={attr_name!r} (ref={ref_id}) → VALUE={value!r}")
+            print(f" DEF={attr_name!r} (ref={ref_id}) → VALUE={value!r}")
             attrs[attr_name] = value
 
-        # If attachments extraction requested, attempt to parse vendor-specific blocks for attachments
-        if self.extract_attachments:
-            for ext in list(spec_obj):
-                t = local_tag(ext)
-                if t.upper() in ("TOOL-EXTENSION", "REQIF-TOOL-EXTENSION", "ATTACHMENTS", "BINARY"):
-                    for att in list(ext):
-                        if local_tag(att).upper() == "ATTACHMENT":
-                            name = att.get("NAME") or att.get("name") or att.get("filename")
-                            encoding = att.get("ENCODING") or att.get("encoding")
-                            data_text = (att.text or "").strip()
-                            if data_text:
-                                try:
-                                    if encoding and encoding.upper() == "BASE64":
-                                        b = base64.b64decode(data_text)
-                                    else:
-                                        b = base64.b64decode(data_text)
-                                except Exception:
-                                    b = data_text.encode("utf-8", errors="ignore")
-                                self.attachments.setdefault(spec_obj.get("IDENTIFIER") or spec_obj.get("ID") or "UNKNOWN", []).append({
-                                    "name": name or "attachment",
-                                    "data": b,
-                                    "encoding": encoding or "BASE64"
-                                })
+            # If attachments extraction requested, attempt to parse vendor-specific blocks for attachments
+            if self.extract_attachments:
+                for ext in list(spec_obj):
+                    t = local_tag(ext)
+                    if t.upper() in ("TOOL-EXTENSION", "REQIF-TOOL-EXTENSION", "ATTACHMENTS", "BINARY"):
+                        for att in list(ext):
+                            if local_tag(att).upper() == "ATTACHMENT":
+                                name = att.get("NAME") or att.get("name") or att.get("filename")
+                                encoding = att.get("ENCODING") or att.get("encoding")
+                                data_text = (att.text or "").strip()
+                                if data_text:
+                                    try:
+                                        if encoding and encoding.upper() == "BASE64":
+                                            b = base64.b64decode(data_text)
+                                        else:
+                                            b = base64.b64decode(data_text)
+                                    except Exception:
+                                        b = data_text.encode("utf-8", errors="ignore")
+                                    self.attachments.setdefault(spec_obj.get("IDENTIFIER") or spec_obj.get("ID") or "UNKNOWN", []).append({
+                                        "name": name or "attachment",
+                                        "data": b,
+                                        "encoding": encoding or "BASE64"
+                                    })
 
         return attrs
-
     # -------------------------------------------------------
     # Improved: collect vendor / tool extension blocks safely
     # -------------------------------------------------------
@@ -710,255 +839,140 @@ class ReqIFParser:
                         return self.def_map[ref_id]
         return None
 
-    # --- UPDATED METHOD: Correctly extracts all value types ---
-    def _extract_value(self, attr):
-        tag = local_tag(attr)
-
-        # Handle STRING
-        if tag == "ATTRIBUTE-VALUE-STRING":
-            # Check for THE-VALUE as an XML attribute first (standard ReqIF format)
-            value_attr = attr.get("THE-VALUE")
-            if value_attr is not None:
-                return value_attr.strip()
-
-            # Fallback: Look for nested THE-VALUE element
-            val = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-            return (val.text or "").strip() if val is not None and val.text else ""
-
-        # Handle XHTML - flatten to plain text with preserved line breaks (Option 1)
-        if tag == "ATTRIBUTE-VALUE-XHTML":
-            val_elem = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-            if val_elem is not None:
-                # prefer xhtml:div if present but fall back to any descendant
-                div_elem = val_elem.find("xhtml:div", self.ns) or find_first_child_local(val_elem, "div")
-                content = div_elem if div_elem is not None else val_elem
-                return clean_xhtml_to_text(content)
-            return ""
-
-        # Handle INTEGER/BOOLEAN/DATE (Uses THE-VALUE directly)
-        if tag in ["ATTRIBUTE-VALUE-INTEGER", "ATTRIBUTE-VALUE-BOOLEAN", "ATTRIBUTE-VALUE-DATE"]:
-            val = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-            return (val.text or "").strip() if val is not None and val.text else ""
-
-        # Handle REAL (float)
-        if tag == "ATTRIBUTE-VALUE-REAL":
-            val = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-            if val is not None and val.text:
-                txt = val.text.strip()
-                try:
-                    return float(txt) if "." in txt else int(txt)
-                except Exception:
-                    return txt
-            return ""
-
-        # Handle ENUMERATION (multi-ref aware) - ALWAYS RETURN LIST (Option A)
-        if tag == "ATTRIBUTE-VALUE-ENUMERATION":
-            enum_values: List[str] = []
-
-            # (1) THE-VALUE / ENUM-REF (namespace-aware then local-name)
-            enum_refs = attr.findall(".//reqif:THE-VALUE//reqif:ENUM-REF", self.ns)
-            if not enum_refs:
-                enum_refs = list(iter_elements_by_local_name(attr, "ENUM-REF"))
-            for enum_ref in enum_refs:
-                if enum_ref is not None and (enum_ref.text or "").strip():
-                    enum_id = enum_ref.text.strip()
-                    enum_label = self.enum_map.get(enum_id, enum_id)
-                    enum_values.append(enum_label)
-
-            # (2) fallback: ENUM-VALUE-REF under VALUES
-            if not enum_values:
-                enum_refs2 = attr.findall(".//reqif:VALUES//reqif:ENUM-VALUE-REF", self.ns)
-                if not enum_refs2:
-                    enum_refs2 = list(iter_elements_by_local_name(attr, "ENUM-VALUE-REF"))
-                for enum_ref in enum_refs2:
-                    if enum_ref is not None and (enum_ref.text or "").strip():
-                        enum_id = enum_ref.text.strip()
-                        enum_label = self.enum_map.get(enum_id, enum_id)
-                        enum_values.append(enum_label)
-
-            # (3) fallback: direct THE-VALUE text; maybe comma-separated
-            if not enum_values:
-                the = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-                if the is not None and (the.text or "").strip():
-                    txt = the.text.strip()
-                    if "," in txt:
-                        enum_values = [p.strip() for p in txt.split(",") if p.strip()]
-                    else:
-                        enum_values = [txt]
-
-            # Finalize: ALWAYS return list (even if empty or single)
-            return enum_values
-
-        # Fallback: raw text of THE-VALUE
-        val = attr.find("reqif:THE-VALUE", self.ns) or find_first_child_local(attr, "THE-VALUE")
-        return (val.text or "").strip() if val is not None and val.text else ""
-
-    # ----------------------------------------------------------
-    # Type normalizer (optional)
-    # ----------------------------------------------------------
-    def _normalize_type_from_def(self, def_id: str, value: str):
-        # Quick heuristic: inspect def_id or value to guess type
-        low = value.strip().lower()
-
-        # boolean variants
-        if low in ("true", "false", "yes", "no", "0", "1"):
-            return low in ("true", "yes", "1")
-
-        # integer
-        try:
-            if value.isdigit() or (value.startswith("-") and value[1:].isdigit()):
-                return int(value)
-        except Exception:
-            pass
-
-        # float
-        try:
-            if "." in value:
-                f = float(value)
-                return f
-        except Exception:
-            pass
-
-        # date ISO8601 attempt (handles trailing Z)
-        try:
-            vs = value.strip()
-            if vs.endswith("Z"):
-                vs = vs.replace("Z", "+00:00")
-            # fromisoformat supports offsets like +00:00
-            dt = datetime.fromisoformat(vs)
-            return dt
-        except Exception:
-            pass
-
-        # default: return original string
-        return value
-
-    # ----------------------------------------------------------
-    # Flexible attribute name search helper
-    # ----------------------------------------------------------
-    def _find_flexible(self, attributes: Dict[str, Any], keys: List[str]) -> str:
-        for k in keys:
-            for akey, val in attributes.items():
-                if isinstance(akey, str) and k.lower() in akey.lower():
-                    # flatten lists to a readable string for title/desc detection
-                    if isinstance(val, list):
-                        return ", ".join([str(v) for v in val])
-                    return str(val)
+    # -------------------------------------------------------
+    # Title/Description heuristic helpers
+    # -------------------------------------------------------
+    def _find_flexible(self, attributes, names: List[str]):
+        """Find value in attributes dictionary using case-insensitive partial match on attribute names."""
+        for check_name in names:
+            for attr_name, value in attributes.items():
+                if isinstance(attr_name, str) and check_name.lower() in attr_name.lower():
+                    return value
         return ""
 
-    # ----------------------------------------------------------
-    # Auto-generate title from description: first sentence heuristic
-    # ----------------------------------------------------------
     def _auto_title_from_description(self, description: str) -> str:
-        # simple heuristic: first line or until first period (.)
+        """Generate a short title from the first sentence of the description."""
         if not description:
-            return ""
-        desc = description.strip()
-        lines = [l.strip() for l in desc.splitlines() if l.strip()]
-        if lines:
-            first = lines[0]
-            # split by period but avoid abbreviations (very simple)
-            if "." in first:
-                cand = first.split(".")[0].strip()
-                if len(cand) >= 3:
-                    return cand
-            # fallback: take first 6-10 words
-            words = first.split()
-            return " ".join(words[:8]) + ("..." if len(words) > 8 else "")
-        return desc[:60]
+            return "(Untitled)"
+        
+        # Heuristically find the end of the first sentence
+        match = re.search(r'[.?!]\s', description)
+        
+        if match:
+            # Title is up to and including the punctuation
+            title = description[:match.end()].strip()
+        else:
+            # If no sentence break, use the first few words/lines
+            title = description.split('\n')[0].strip()
+            if len(title) > 80:
+                title = title[:80].strip() + "..."
+            
+        # Clean up excessive whitespace
+        return re.sub(r'\s+', ' ', title).strip()
 
-    # ----------------------------------------------------------
-    # Parse specifications and build hierarchy (SPEC-HIERARCHY)
-    # ----------------------------------------------------------
-    def _parse_specifications_and_hierarchy(self, content_root):
-        # Look for SPEC-HIERARCHY elements anywhere (namespace-agnostic)
-        for sh in iter_elements_by_local_name(content_root, "SPEC-HIERARCHY"):
-            self._walk_spec_hierarchy(sh, parent_id=None)
+    # -------------------------------------------------------
+    # Type Normalization (Post-extraction value conversion)
+    # -------------------------------------------------------
+    def _normalize_type_from_def(self, ref_id: str, value: Any) -> Any:
+        """
+        Attempts to convert extracted string values to native types (int, bool, datetime)
+        based on the attribute definition's data type, or resolve enum labels.
+        """
+        if not self.normalize_types or not isinstance(value, str):
+            return value
 
-    def _walk_spec_hierarchy(self, sh_elem, parent_id=None):
-        # object ref may be attribute 'OBJECT' or child <OBJECT>id</OBJECT>
-        obj_ref = sh_elem.get("OBJECT")
-        if not obj_ref:
-            obj_child = sh_elem.find("reqif:OBJECT", self.ns) or find_first_child_local(sh_elem, "OBJECT")
-            if obj_child is not None and (obj_child.text or "").strip():
-                obj_ref = obj_child.text.strip()
+        # Try Integer (based on ID or pattern)
+        if any(keyword in ref_id.upper() for keyword in ["INTEGER", "INT", "NUMBER", "COUNT"]) or re.match(r"^\d+$", value.strip()):
+            try:
+                return int(value)
+            except ValueError:
+                pass
+        
+        # Try Boolean
+        if any(keyword in ref_id.upper() for keyword in ["BOOL", "BOOLEAN", "FLAG"]):
+            if value.lower() in ["true", "1"]:
+                return True
+            if value.lower() in ["false", "0"]:
+                return False
+        
+        # Try Date/Time
+        if any(keyword in ref_id.upper() for keyword in ["DATE", "TIME", "DATETIME"]):
+            # Common ReqIF datetime format: 2025-01-15T10:00:00Z
+            try:
+                # Use fromisoformat for robustness
+                return datetime.fromisoformat(value.replace('Z', '+00:00')) 
+            except Exception:
+                pass
 
-        if obj_ref:
-            if parent_id:
-                # register relationship
-                self.parent_map[obj_ref] = parent_id
-                self.hierarchy_map.setdefault(parent_id, []).append(obj_ref)
-            else:
-                # top-level
-                self.parent_map.setdefault(obj_ref, None)
-            # note: continue walking nested children
-            nested = sh_elem.find("reqif:CHILDREN", self.ns) or find_first_child_local(sh_elem, "CHILDREN")
-            if nested is not None:
-                for child_sh in list(iter_elements_by_local_name(nested, "SPEC-HIERARCHY")):
-                    self._walk_spec_hierarchy(child_sh, parent_id=obj_ref)
-            else:
-                for child_sh in list(iter_elements_by_local_name(sh_elem, "SPEC-HIERARCHY")):
-                    if child_sh is not sh_elem:
-                        self._walk_spec_hierarchy(child_sh, parent_id=obj_ref)
+        return value
 
-    # ----------------------------------------------------------
-    # Parse relations / traceability (SPEC-RELATIONS or SPEC-RELATION)
-    # ----------------------------------------------------------
-    def _parse_relations(self, content_root):
-        # find SPEC-RELATION elements anywhere (namespace-agnostic)
-        rels = content_root.findall(".//reqif:SPEC-RELATION", self.ns)
-        if not rels:
-            rels = list(iter_elements_by_local_name(content_root, "SPEC-RELATION"))
+    # --- UPDATED METHOD: Correctly extracts all value types (FIXED) ---
+    def _extract_value(self, attr):
+        
+        tag = local_tag(attr)
+        
+        # 1. Standard value types using <THE-VALUE>
+        if tag in ("ATTRIBUTE-VALUE-STRING", "ATTRIBUTE-VALUE-INTEGER", 
+                   "ATTRIBUTE-VALUE-BOOLEAN", "ATTRIBUTE-VALUE-DATE", 
+                   "ATTRIBUTE-VALUE-REAL"):
+            value_elem = self._find(attr, "THE-VALUE")
+            if value_elem is not None:
+                # Boolean value is stored as an XML attribute in <THE-VALUE>
+                if tag == "ATTRIBUTE-VALUE-BOOLEAN":
+                    return value_elem.get("THE-VALUE") 
+                # Other simple types use text content
+                return text_of(value_elem)
 
-        for rel in rels:
-            # Try several possible encodings for source/target
-            source = None
-            target = None
-            rtype = rel.get("TYPE") or None
+        # 2. XHTML Content
+        elif tag == "ATTRIBUTE-VALUE-XHTML":
+            value_elem = self._find(attr, "THE-VALUE")
+            if value_elem is not None:
+                # Find the actual XHTML root (usually <div> or <p>)
+                xhtml_root = find_first_child_local(value_elem, "div") or find_first_child_local(value_elem, "p")
+                
+                # If XHTML root found, clean it
+                if xhtml_root is not None:
+                    return clean_xhtml_to_text(xhtml_root)
+                
+                # Fallback: if <THE-VALUE> has raw text (Polarion, etc.)
+                return text_of(value_elem)
 
-            # nested SOURCE/TARGET elements
-            src = rel.find("reqif:SOURCE", self.ns) or find_first_child_local(rel, "SOURCE")
-            tgt = rel.find("reqif:TARGET", self.ns) or find_first_child_local(rel, "TARGET")
-            if src is not None and (src.text or "").strip():
-                source = src.text.strip()
-            if tgt is not None and (tgt.text or "").strip():
-                target = tgt.text.strip()
-
-            # SPEC-OBJECT-REF inside source/target
-            if src is not None:
-                so_ref = src.find("reqif:SPEC-OBJECT-REF", self.ns) or find_first_child_local(src, "SPEC-OBJECT-REF")
-                if so_ref is not None and (so_ref.text or "").strip():
-                    source = so_ref.text.strip()
-            if tgt is not None:
-                to_ref = tgt.find("reqif:SPEC-OBJECT-REF", self.ns) or find_first_child_local(tgt, "SPEC-OBJECT-REF")
-                if to_ref is not None and (to_ref.text or "").strip():
-                    target = to_ref.text.strip()
-
-            # attributes on the relation
-            if not source:
-                source = rel.get("SOURCE")
-            if not target:
-                target = rel.get("TARGET")
-
-            # fallback scan children for any SOURCE-like or TARGET-like
-            if not source or not target:
-                for child in list(rel):
-                    if child is None:
-                        continue
-                    ctag = local_tag(child).upper()
-                    if "SOURCE" in ctag and (child.text or "").strip() and not source:
-                        source = child.text.strip()
-                    if "TARGET" in ctag and (child.text or "").strip() and not target:
-                        target = child.text.strip()
-                    if local_tag(child).upper().endswith("SPEC-OBJECT-REF") and (child.text or "").strip():
-                        if not source:
-                            source = child.text.strip()
-                        elif not target:
-                            target = child.text.strip()
-
-            if source or target:
-                relation = {"source": source, "target": target, "type": rtype}
-                self.relations.append(relation)
+        # 3. Enumeration (Single or Multiple)
+        elif tag == "ATTRIBUTE-VALUE-ENUMERATION":
+            
+            # --- Multi-Value Enumeration (ReqIF Standard) ---
+            # Finds <VALUES><ENUM-VALUE-REF>
+            enum_value_refs_container = self._find(attr, "VALUES")
+            enum_refs = self._findall(enum_value_refs_container or attr, "ENUM-VALUE-REF")
+            
+            if enum_refs:
+                enum_ids = [text_of(ref) for ref in enum_refs if text_of(ref)]
+                # Resolve IDs to Long Names
+                values = [self.enum_map.get(e_id, e_id) for e_id in enum_ids]
+                
+                # Return list if multi-value, or single value if single
+                return values if len(values) > 1 else (values[0] if values else "")
+            
+            # --- Single-Value Enumeration (ReqIF Standard + DOORS/Polarion fallback) ---
+            # Finds <THE-VALUE><ENUM-REF> (single value reference)
+            enum_ref_parent = self._find(attr, "THE-VALUE")
+            if enum_ref_parent is not None:
+                enum_ref = find_first_child_local(enum_ref_parent, "ENUM-VALUE-REF")
+                if enum_ref is None:
+                    # Fallback for old/vendor styles
+                    enum_ref = find_first_child_local(enum_ref_parent, "ENUM-REF")
+                
+                if enum_ref is not None and text_of(enum_ref):
+                    enum_id = text_of(enum_ref)
+                    return self.enum_map.get(enum_id, enum_id)
+            
+            # --- Single-Value Enumeration (ReqIF Studio/Polarion fallback: raw name in <THE-VALUE>) ---
+            # Handles cases where <THE-VALUE> contains the label directly (e.g., "Approved")
+            value_elem = self._find(attr, "THE-VALUE")
+            if value_elem is not None and text_of(value_elem):
+                return text_of(value_elem)
+                
+        return None
 
     # ----------------------------------------------------------
     # Public helper: pretty print requirements (debug)
@@ -981,8 +995,6 @@ if __name__ == "__main__":
     parser = ReqIFParser("sample.reqif", extract_attachments=False)
     requirements = parser.parse()
     parser.pretty_print_requirements(requirements)
-
-
 
 
 
