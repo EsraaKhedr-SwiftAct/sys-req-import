@@ -337,13 +337,13 @@ def sync_reqif_to_github():
         print("❌ Missing GITHUB_TOKEN or GITHUB_REPOSITORY.")
         sys.exit(1)
 
-    # --- NEW: Initialize Project IDs ---
+    # --- Initialize Project IDs ---
     try:
         initialize_project_ids(repo_full_name, github_token)
     except Exception as e:
         print(f"❌ Project initialization failed: {e}")
         # PROJECT_NODE_ID will be None, skipping project integration
-        
+
     try:
         reqs = parse_reqif_requirements()
         issues = get_existing_issues(repo_full_name, github_token)
@@ -355,10 +355,8 @@ def sync_reqif_to_github():
             if title.startswith("[") and "]" in title:
                 req_id = title.split("]")[0][1:]
                 issue_map[req_id] = issue
-            # Check for missing node_id (critical for project API)
             if not issue.get('node_id'):
-                 print(f"⚠️ Warning: Issue #{issue['number']} is missing 'node_id'. Project sync will be skipped for this issue.")
-
+                print(f"⚠️ Warning: Issue #{issue['number']} is missing 'node_id'. Project sync will be skipped for this issue.")
 
         # Create or update issues
         for req_id, req in reqs.items():
@@ -367,19 +365,20 @@ def sync_reqif_to_github():
                 # Update issue details if body or title changed
                 if issue["title"] != f"[{req['id']}] {choose_title(req)}" or issue["body"] != format_req_body(req):
                     update_issue(repo_full_name, github_token, issue["number"], req)
-                
-                # --- NEW: Set Project Fields for existing issue ---
+
+                # Set Project Fields for existing issue
                 if PROJECT_NODE_ID and issue.get('node_id'):
-                    set_issue_project_fields(github_token, issue['node_id'], req)
+                    set_issue_project_fields(req, issue['node_id'], github_token)
+
             else:
                 # Issue creation returns full JSON object
                 new_issue_json = create_issue(repo_full_name, github_token, req)
-                
-                # --- NEW: Add to Project and Set Fields for new issue ---
-                if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
-                    set_issue_project_fields(github_token, new_issue_json['node_id'], req)
 
-        # Close removed issues (Your existing, proven logic)
+                # Set Project Fields for new issue
+                if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
+                    set_issue_project_fields(req, new_issue_json['node_id'], github_token)
+
+        # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
@@ -388,6 +387,7 @@ def sync_reqif_to_github():
     except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
+
 
 
 if __name__ == "__main__":
