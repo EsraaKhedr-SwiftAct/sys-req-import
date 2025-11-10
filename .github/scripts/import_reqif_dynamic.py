@@ -168,7 +168,7 @@ def initialize_project_ids(repo_full_name, github_token):
     """
     Hardcoded Project and Field IDs for @Test Project.
     """
-    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABAL
+    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABEL
 
     PROJECT_NODE_ID = "PVT_kwHOCWTIsM4BHvNr"
 
@@ -177,7 +177,7 @@ def initialize_project_ids(repo_full_name, github_token):
 
     # --- Priority field ---
     FIELD_ID_PRIORITY = "PVTF_lAHOCWTIsM4BHvNrzg4a35w"
-    FIELD_ID_LABAL= "PVTSSF_lAHOCWTIsM4BHvNrzg4Z25M"
+    FIELD_ID_LABEL= "PVTSSF_lAHOCWTIsM4BHvNrzg4Z25M"
 
 
     print("✅ Using hardcoded project + field configuration")

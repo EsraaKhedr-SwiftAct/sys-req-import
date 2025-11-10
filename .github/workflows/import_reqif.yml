@@ -43,7 +43,7 @@ jobs:
 
       - name: Run ReqIF import
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
           # 🆕 NEW: Specify the Project V2 Title directly
           PROJECT_TITLE: "@Test Project" 
         run: |
