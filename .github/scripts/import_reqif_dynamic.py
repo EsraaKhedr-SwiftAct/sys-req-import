@@ -119,6 +119,48 @@ def github_graphql_request(token, query, variables=None):
         print(f"❌ Error during GraphQL request: {e}")
     return {}
 
+# 🎯 FIX 1: New helper function to get the correct Project V2 Item ID (PVTI_...)
+def get_project_item_id(issue_node_id, project_node_id, github_token):
+    """
+    Queries GitHub to find the ProjectV2Item ID (PVTI_...) 
+    associated with an issue's node ID (I_...). This ID is required for updating fields.
+    """
+    query = """
+    query GetProjectItem($projectId: ID!, $issueId: ID!) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          # Use the Issue ID (I_...) to find the item in the project
+          item(contentId: $issueId) { 
+            id # This returns the ProjectV2Item ID (PVTI_...)
+          }
+        }
+      }
+    }
+    """
+    variables = {
+        "projectId": project_node_id,
+        "issueId": issue_node_id
+    }
+    
+    response = github_graphql_request(github_token, query, variables)
+    
+    # Safely extract the PVTI_... ID
+    try:
+        if 'errors' in response:
+            return None
+            
+        project_item = response.get('data', {}).get('node', {}).get('item')
+        if project_item and 'id' in project_item:
+            project_item_id = project_item['id']
+            # Optional: print for debugging
+            # print(f"✅ Resolved Issue ID {issue_node_id} to ProjectV2Item ID {project_item_id}")
+            return project_item_id
+        
+        # If 'item' is None, the issue is not on the board
+        return None
+        
+    except (KeyError, TypeError, AttributeError):
+        return None
 
 def choose_title(req):
     req_id = str(req.get('id', '')).strip()
@@ -181,17 +223,26 @@ def initialize_project_ids(repo_full_name, github_token):
 
 
     print("✅ Using hardcoded project + field configuration")
-    print(f"   Project ID: {PROJECT_NODE_ID}")
-    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
-    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
+    print(f"   Project ID: {PROJECT_NODE_ID}")
+    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
+    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
 
     
 
-def set_issue_project_fields(req, project_item_id, github_token):
+# 🎯 FIX 2: Resolve Project V2 Item ID inside the function
+# The argument 'item_id_or_node' is the Issue Node ID (I_...) passed from sync_reqif_to_github
+def set_issue_project_fields(req, item_id_or_node, github_token):
     """
-    Assigns System Requirement ID, Requirement Label (single-select), and Priority fields
-    for each requirement imported from ReqIF.
+    Assigns Project V2 fields by first resolving the Issue ID (I_...) to the 
+    required Project V2 Item ID (PVTI_...).
     """
+    
+    # Use the passed argument (Issue Node ID) to find the Project V2 Item ID
+    project_item_id = get_project_item_id(item_id_or_node, PROJECT_NODE_ID, github_token)
+    
+    if not project_item_id:
+        print(f"⚠️ Skipping project field update for {req.get('id', 'Unknown Req')}: Item not found on Project V2 board.")
+        return # Cannot update fields if the item is not on the board
 
     # -----------------------------------------------------------------
     # Step 2: Set "System Requirement ID" (Text)
@@ -208,7 +259,7 @@ def set_issue_project_fields(req, project_item_id, github_token):
         """
         github_graphql_request(github_token, query_set_sys_id, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id,
+            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
             "fieldId": FIELD_ID_REQID,
             "value": str(sys_req_id)
         })
@@ -228,9 +279,9 @@ def set_issue_project_fields(req, project_item_id, github_token):
         """
         github_graphql_request(github_token, query_set_label, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id,
+            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
             "fieldId": FIELD_ID_LABEL,
-            "optionId": "ccd91893"  # <-- 'System Requirement' option ID
+            "optionId": "ccd91893"  # <-- 'System Requirement' option ID
         })
         print("-> Set 'Requirement Label' to: System Requirement")
 
@@ -253,7 +304,7 @@ def set_issue_project_fields(req, project_item_id, github_token):
         """
         github_graphql_request(github_token, query_set_priority_text, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id,
+            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
             "fieldId": FIELD_ID_PRIORITY,
             "value": str(priority_text)
         })
@@ -368,6 +419,7 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for existing issue
                 if PROJECT_NODE_ID and issue.get('node_id'):
+                    # The function set_issue_project_fields will now correctly resolve the Project V2 Item ID
                     set_issue_project_fields(req, issue['node_id'], github_token)
 
             else:
@@ -376,6 +428,7 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for new issue
                 if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
+                    # The function set_issue_project_fields will now correctly resolve the Project V2 Item ID
                     set_issue_project_fields(req, new_issue_json['node_id'], github_token)
 
         # Close removed issues
@@ -387,6 +440,10 @@ def sync_reqif_to_github():
     except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
+
+
+if __name__ == "__main__":
+    sync_reqif_to_github()
 
 
 
