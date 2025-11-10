@@ -399,14 +399,19 @@ def set_issue_project_fields(req, issue_node_id, github_token):
     # -----------------------------------------------------------------
     priority_text = (req.get("attributes") or {}).get("Priority") or (req.get("attributes") or {}).get("PRIORITY")
 
-    # 🆕 Priority Mapping for robustness against data entry errors 
-    # Map the value from ReqIF (key) to the exact option name in GitHub (value).
+    # 🆕 Priority Mapping: Map ReqIF values (High/Medium/Low) to your GitHub Project options (P0/P1/P2)
     PRIORITY_MAPPING = {
-        "High": "High", 
-        "Medium": "Medium",
-        "Mid": "Medium",     # Map alternative terms to the official option
-        "Low": "Low",
-        "medium": "Medium",  # Handle lower-case input
+        # ReqIF Value (Key) : GitHub Project Option Name (Value)
+        "High": "P0",       # Highest Priority
+        "Critical": "P0",   # Map Critical/Highest to P0
+        "high": "P0",
+        
+        "Medium": "P1",     # Medium Priority
+        "Mid": "P1",        # Map alternatives to P1
+        "medium": "P1",
+        
+        "Low": "P2",        # Lowest Priority
+        "low": "P2",
     }
     
     # Use the mapping. If no mapping is found, use the original text as a fallback.
@@ -438,18 +443,109 @@ def set_issue_project_fields(req, issue_node_id, github_token):
 
 
 # -------------------------
-# GitHub issue management (UPDATED URLs)
+# New Project V2 Helper: Retrieve Issues from Project
+# -------------------------
+def get_existing_issues_from_project(project_node_id, github_token):
+    """
+    Uses GraphQL to fetch all issues that are content items in the ProjectV2.
+    """
+    query = """
+    query GetProjectItems($projectId: ID!, $cursor: String) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          items(first: 100, after: $cursor) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              content {
+                __typename
+                ... on Issue {
+                  id # Issue Node ID (I_...)
+                  number # Issue Number
+                  title # Issue Title
+                  state # 'OPEN' or 'CLOSED'
+                }
+                # Also include pull requests if you want, but for requirements, Issue is typically enough
+                ... on PullRequest {
+                  id 
+                  number
+                  title
+                  state
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    all_issues = []
+    cursor = None
+    has_next_page = True
+
+    print("🔎 Starting GraphQL query to retrieve all project items...")
+
+    while has_next_page:
+        variables = {"projectId": project_node_id, "cursor": cursor}
+        response = github_graphql_request(github_token, query, variables)
+        
+        if 'errors' in response:
+            print("❌ Failed to retrieve project items. Falling back to label search (if project ID was available).")
+            return []
+            
+        project = response.get('data', {}).get('node', {})
+        items_data = project.get('items', {})
+        page_info = items_data.get('pageInfo', {})
+        nodes = items_data.get('nodes', [])
+
+        for item in nodes:
+            content = item.get('content', {})
+            typename = content.get('__typename')
+            
+            # Synthesize a dict that looks like a REST issue response
+            if typename in ['Issue', 'PullRequest'] and content.get('title', '').startswith('['):
+                all_issues.append({
+                    "number": content.get('number'),
+                    "title": content.get('title'),
+                    "node_id": content.get('id'), # This is the Issue Node ID (I_...) or PR Node ID
+                    "state": content.get('state', '').lower(),
+                    # The rest is not needed but required for compatibility with main sync loop
+                    "pull_request": {} if typename == 'PullRequest' else None, 
+                    "body": None, 
+                })
+
+        has_next_page = page_info.get('hasNextPage', False)
+        cursor = page_info.get('endCursor')
+
+    print(f"✅ Retrieved {len(all_issues)} items from the project.")
+    return all_issues
+
+
+# -------------------------
+# GitHub issue management (UPDATED to prefer Project lookup)
 # -------------------------
 def get_existing_issues(repo, token):
-    # FIXED URL: Prepends /repos/
-    url = f"{GITHUB_API_URL}/repos/{repo}/issues?state=all&labels=reqif-import&per_page=100"
-    issues = []
-    while url:
-        resp = requests.get(url, headers=github_headers(token))
-        resp.raise_for_status()
-        issues += resp.json()
-        url = resp.links.get("next", {}).get("url")
-    return issues
+    """
+    Retrieves all issues that were previously synced.
+    Prefers Project V2 lookup over label-based search.
+    """
+    # Prefer Project V2 Item Retrieval for completeness if PROJECT_NODE_ID is available
+    if PROJECT_NODE_ID:
+        return get_existing_issues_from_project(PROJECT_NODE_ID, token)
+    else:
+        # Fallback to old label-based REST API query if project setup failed
+        print("🔎 Retrieving issues using REST API and 'reqif-import' label...")
+        url = f"{GITHUB_API_URL}/repos/{repo}/issues?state=all&labels=reqif-import&per_page=100"
+        issues = []
+        while url:
+            resp = requests.get(url, headers=github_headers(token))
+            resp.raise_for_status()
+            issues += resp.json()
+            url = resp.links.get("next", {}).get("url")
+        return issues
 
 
 def create_issue(repo, token, req):
@@ -523,15 +619,21 @@ def sync_reqif_to_github():
 
     try:
         reqs = parse_reqif_requirements()
+        # Retrieve ALL issues from the project (or using the label fallback)
         issues = get_existing_issues(repo_full_name, github_token)
 
-        # Map existing issues by ReqIF ID
+        # Map existing issues by ReqIF ID (must match the title format and not be a Pull Request)
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
-            if title.startswith("[") and "]" in title:
-                req_id = title.split("]")[0][1:]
-                issue_map[req_id] = issue
+            # Filter by the unique title format and ignore Pull Requests
+            if title.startswith("[") and "]" in title and issue.get('pull_request') is None:
+                try:
+                    req_id = title.split("]")[0][1:]
+                    issue_map[req_id] = issue
+                except IndexError:
+                    continue # Ignore malformed titles
+            
             if not issue.get('node_id'):
                 print(f"⚠️ Warning: Issue #{issue['number']} is missing 'node_id'. Project sync will be skipped for this issue.")
 
