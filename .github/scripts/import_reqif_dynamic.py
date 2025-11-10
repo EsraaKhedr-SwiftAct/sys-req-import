@@ -5,7 +5,7 @@ import glob
 import traceback
 import requests
 import html
-import json # <--- NEW IMPORT for GraphQL error handling
+import json
 
 # Universal ReqIF parser
 from reqif_parser_full import ReqIFParser # Must handle EA/Polarion/DOORS/Jama
@@ -109,17 +109,15 @@ def github_graphql_request(token, query, variables=None):
         
         if 'errors' in data:
             print("❌ GraphQL Errors:", json.dumps(data['errors'], indent=2))
-            raise Exception("GitHub GraphQL API returned errors.")
+            # Do not raise exception here, let the caller handle failure for optional features
+            return {'errors': data['errors']}
             
         return data
     except requests.exceptions.HTTPError as e:
         print(f"❌ HTTP Error for GraphQL: {e}")
-        raise
     except Exception as e:
         print(f"❌ Error during GraphQL request: {e}")
-        # Allows caller to continue if project integration fails
-        pass
-        return {}
+    return {}
 
 
 def choose_title(req):
@@ -164,68 +162,30 @@ def format_req_body(req):
 
 
 # -------------------------
-# Project Management Logic (NEW)
+# Project Management Logic (UPDATED FOR DYNAMIC DISCOVERY)
 # -------------------------
 def initialize_project_ids(repo_full_name, github_token):
     """
-    Retrieves the Node IDs for the first Project associated with the repository 
-    and its required custom fields ('Priority', 'System Requirement ID').
+    Hardcoded Project and Field IDs for @Test Project.
     """
-    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, PRIORITY_OPTIONS
-    owner, repo = repo_full_name.split('/')
-    
-    # GraphQL query to get the repository's projects and their fields
-    query = """
-    query($owner: String!, $repo: String!) {
-      repository(owner: $owner, name: $repo) {
-        id
-        projectsV2(first: 20) {
-          nodes {
-            id
-            title
-            fields(first: 20) {
-              nodes {
-                ... on ProjectV2Field { id, name }
-                ... on ProjectV2SingleSelectField { id, name, options { id, name } } 
-              }
-            }
-          }
-        }
-      }
-    }
-    """
-    
-    data = github_graphql_request(github_token, query, {"owner": owner, "repo": repo})
-    if not data or 'data' not in data or not data['data']['repository']:
-        print("⚠️ Failed to query repository projects. Skipping project integration.")
-        return
+    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABAL
 
-    projects = data['data']['repository']['projectsV2']['nodes']
+    PROJECT_NODE_ID = "PVT_kwHOCWTIsM4BHvNr"
+
+    # --- System Requirement ID field ---
+    FIELD_ID_REQID = "PVTF_lAHOCWTIsM4BHvNrzg4Z25I"
+
+    # --- Priority field ---
+    FIELD_ID_PRIORITY = "PVTF_lAHOCWTIsM4BHvNrzg4a35w"
+    FIELD_ID_LABAL= "PVTSSF_lAHOCWTIsM4BHvNrzg4Z25M"
+
+
+    print("✅ Using hardcoded project + field configuration")
+    print(f"   Project ID: {PROJECT_NODE_ID}")
+    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
+    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
+
     
-    if not projects:
-        print("⚠️ No projects found associated with this repository. Skipping project integration.")
-        return
-
-    # Use the first project found (Dynamic Selection)
-    project = projects[0]
-    PROJECT_NODE_ID = project['id']
-    print(f"✅ Found Project '{project['title']}' with ID: {PROJECT_NODE_ID} (Using first project found).")
-            
-    for field in project['fields']['nodes']:
-        if field['name'] == 'System Requirement ID':
-            FIELD_ID_REQID = field['id']
-            print(f"✅ Mapped 'System Requirement ID' field ID: {FIELD_ID_REQID}")
-        
-        elif field['name'] == 'Priority':
-            FIELD_ID_PRIORITY = field['id']
-            print(f"✅ Mapped 'Priority' field ID: {FIELD_ID_PRIORITY}")
-            for option in field.get('options', []):
-                PRIORITY_OPTIONS[option['name']] = option['id']
-            print(f"   Collected {len(PRIORITY_OPTIONS)} Priority options.")
-            
-    if not FIELD_ID_REQID or not FIELD_ID_PRIORITY:
-        print("⚠️ Warning: One or both custom fields ('System Requirement ID', 'Priority') were not found in the project. Field mapping will be incomplete.")
-
 
 def set_issue_project_fields(github_token, issue_node_id, req):
     """Adds the issue to the project and sets custom fields."""
@@ -241,23 +201,27 @@ def set_issue_project_fields(github_token, issue_node_id, req):
     }
     """
     project_item_id = None
-    try:
-        data = github_graphql_request(github_token, query_add_item, {
-            "projectId": PROJECT_NODE_ID, 
-            "issueId": issue_node_id
-        })
-        # If the item was already present, this mutation may fail.
-        # Handling item ID retrieval after adding is complex, but we rely on the mutation to succeed.
+    
+    data = github_graphql_request(github_token, query_add_item, {
+        "projectId": PROJECT_NODE_ID, 
+        "issueId": issue_node_id
+    })
+
+    if data and 'data' in data and data['data'] and data['data'].get('addProjectV2ItemById') and data['data']['addProjectV2ItemById'].get('item'):
         project_item_id = data['data']['addProjectV2ItemById']['item']['id']
         print(f"-> Added issue to project. Project Item ID: {project_item_id}")
-    except Exception as e:
-        # If it fails (likely already in project), we skip the field update to prevent further errors
-        print(f"-> ⚠️ Failed to add item to project (Status: {e}). Fields will not be set.")
+    elif data and 'errors' in data and "already in this project" in str(data['errors']):
+        print(f"-> ⚠️ Item already in project. Skipping re-add.")
+        return
+    else:
+        print(f"-> ⚠️ Failed to add item to project. Skipping field update.")
         return
 
-    # --- Step 2: Set 'System Requirement ID' (Text field) ---
-    req_id_value = req['id']
+    # -----------------------------------------------------------------
+    # Step 2: Set "System Requirement ID" (Text field)
+    # -----------------------------------------------------------------
     if FIELD_ID_REQID and project_item_id:
+        req_id_value = req.get('id', '(No ID)')
         query_set_text = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
           updateProjectV2ItemFieldValue(input: {
@@ -266,42 +230,60 @@ def set_issue_project_fields(github_token, issue_node_id, req):
           }) { projectV2Item { id } }
         }
         """
-        try:
-            github_graphql_request(github_token, query_set_text, {
-                "projectId": PROJECT_NODE_ID, 
-                "itemId": project_item_id, 
-                "fieldId": FIELD_ID_REQID, 
-                "value": req_id_value
-            })
-            print(f"-> Set 'System Requirement ID' to: {req_id_value}")
-        except Exception:
-            print(f"-> ❌ Failed to set 'System Requirement ID' field.")
+        github_graphql_request(github_token, query_set_text, {
+            "projectId": PROJECT_NODE_ID,
+            "itemId": project_item_id,
+            "fieldId": FIELD_ID_REQID,
+            "value": req_id_value
+        })
+        print(f"-> Set 'System Requirement ID' to: {req_id_value}")
 
-    # --- Step 3: Set 'Priority' (Single Select field) ---
-    priority_text = req['attributes'].get('Priority') or req['attributes'].get('PRIORITY')
-    
-    if FIELD_ID_PRIORITY and priority_text and priority_text in PRIORITY_OPTIONS and project_item_id:
-        option_id = PRIORITY_OPTIONS[priority_text]
-        query_set_single_select = """
-        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+    # -----------------------------------------------------------------
+    # Step 3: Set "Requirement Label" (Text field → Hardcoded)
+    # -----------------------------------------------------------------
+    if FIELD_ID_LABAL and project_item_id:
+        label_value = "System Requirement"  # Hardcoded
+        query_set_label = """
+        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
           updateProjectV2ItemFieldValue(input: {
             projectId: $projectId, itemId: $itemId, fieldId: $fieldId, 
-            value: { singleSelectOptionId: $optionId }
+            value: { text: $value }
           }) { projectV2Item { id } }
         }
         """
-        try:
-            github_graphql_request(github_token, query_set_single_select, {
-                "projectId": PROJECT_NODE_ID, 
-                "itemId": project_item_id, 
-                "fieldId": FIELD_ID_PRIORITY, 
+        github_graphql_request(github_token, query_set_label, {
+            "projectId": PROJECT_NODE_ID,
+            "itemId": project_item_id,
+            "fieldId": FIELD_ID_LABAL,
+            "value": label_value
+        })
+        print(f"-> Set 'Requirement Label' to: {label_value}")
+
+    # -----------------------------------------------------------------
+    # Step 4: Set "Priority" (Single Select field from ReqIF)
+    # -----------------------------------------------------------------
+    priority_text = req["attributes"].get("Priority") or req["attributes"].get("PRIORITY")
+    if FIELD_ID_PRIORITY and priority_text:
+        if priority_text in PRIORITY_OPTIONS:
+            option_id = PRIORITY_OPTIONS[priority_text]
+            query_set_priority = """
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId, itemId: $itemId, fieldId: $fieldId, 
+                value: { singleSelectOptionId: $optionId }
+              }) { projectV2Item { id } }
+            }
+            """
+            github_graphql_request(github_token, query_set_priority, {
+                "projectId": PROJECT_NODE_ID,
+                "itemId": project_item_id,
+                "fieldId": FIELD_ID_PRIORITY,
                 "optionId": option_id
             })
             print(f"-> Set 'Priority' to: {priority_text}")
-        except Exception:
-            print(f"-> ❌ Failed to set 'Priority' field.")
-    elif FIELD_ID_PRIORITY and priority_text:
-        print(f"-> ⚠️ ReqIF Priority '{priority_text}' not found as a valid Project Option. Skipping Priority set.")
+        else:
+            print(f"-> ⚠️ Priority '{priority_text}' not found among project options. Skipped.")
+
 
 # -------------------------
 # GitHub issue management (UPDATED URLs)

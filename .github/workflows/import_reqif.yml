@@ -1,6 +1,15 @@
 name: Import ReqIF
 
 on:
+  # NEW: Automatically run the workflow when files change
+  push:
+    paths:
+      # Trigger on changes to any file ending in .reqif, regardless of path
+      - '**/*.reqif' 
+      # Trigger on changes to the Python synchronization script
+      - '.github/scripts/import_reqif_dynamic.py' 
+      
+  # Existing: Keep the manual trigger functionality
   workflow_dispatch:
     inputs:
       reqif-file:
@@ -9,9 +18,11 @@ on:
         default: 'sample.reqif'
         
 permissions:
-  contents: read        # keep read for repo content
-  issues: write         # allow creating/updating issues
-       
+  contents: read
+  issues: write
+  # ➡️ MUST be indented to the same level as 'contents' ⬅️
+  repository-projects: write   # ✅ Required for Projects V2 API access
+  actions: write       
 
 jobs:
   import_reqif:
@@ -33,5 +44,7 @@ jobs:
       - name: Run ReqIF import
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 🆕 NEW: Specify the Project V2 Title directly
+          PROJECT_TITLE: "@Test Project" 
         run: |
           python .github/scripts/import_reqif_dynamic.py "${{ github.event.inputs.reqif-file }}"
