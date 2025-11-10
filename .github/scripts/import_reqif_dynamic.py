@@ -196,7 +196,7 @@ def set_issue_project_fields(req, project_item_id, github_token):
     # -----------------------------------------------------------------
     # Step 2: Set "System Requirement ID" (Text)
     # -----------------------------------------------------------------
-    sys_req_id = req.get("id")
+    sys_req_id = req.get("id") or req.get("ID")
     if FIELD_ID_REQID and sys_req_id:
         query_set_sys_id = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
@@ -210,7 +210,7 @@ def set_issue_project_fields(req, project_item_id, github_token):
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id,
             "fieldId": FIELD_ID_REQID,
-            "value": sys_req_id
+            "value": str(sys_req_id)
         })
         print(f"-> Set 'System Requirement ID' to: {sys_req_id}")
 
@@ -237,7 +237,11 @@ def set_issue_project_fields(req, project_item_id, github_token):
     # -----------------------------------------------------------------
     # Step 4: Set "Priority" (Text)
     # -----------------------------------------------------------------
-    priority_text = req["attributes"].get("Priority") or req["attributes"].get("PRIORITY")
+    priority_text = None
+    attrs = req.get("attributes")
+    if isinstance(attrs, dict):
+        priority_text = attrs.get("Priority") or attrs.get("PRIORITY")
+
     if FIELD_ID_PRIORITY and priority_text:
         query_set_priority_text = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
@@ -251,9 +255,10 @@ def set_issue_project_fields(req, project_item_id, github_token):
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id,
             "fieldId": FIELD_ID_PRIORITY,
-            "value": priority_text
+            "value": str(priority_text)
         })
         print(f"-> Set 'Priority' (Text) to: {priority_text}")
+
 
 # -------------------------
 # GitHub issue management (UPDATED URLs)
