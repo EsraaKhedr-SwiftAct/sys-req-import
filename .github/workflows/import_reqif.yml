@@ -44,7 +44,8 @@ jobs:
       - name: Run ReqIF import
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          
           # 🆕 NEW: Specify the Project V2 Title directly
-          PROJECT_TITLE: "@Test Project" 
+          PROJECT_TITLE: "@System requirement Project" 
         run: |
           python .github/scripts/import_reqif_dynamic.py "${{ github.event.inputs.reqif-file }}"
