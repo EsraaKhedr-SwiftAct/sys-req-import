@@ -84,7 +84,8 @@ GITHUB_API_URL = "https://api.github.com"
 PROJECT_NODE_ID = None
 FIELD_ID_REQID = None
 FIELD_ID_PRIORITY = None
-PRIORITY_OPTIONS = {} # Map Priority text (e.g., 'High') to its Project Field Option ID
+FIELD_ID_LABEL = None 
+FIELD_ID_MAP = {} # 🆕 NEW: Stores all dynamically resolved field metadata (name -> IDs)
 
 
 def github_headers(token):
@@ -109,7 +110,6 @@ def github_graphql_request(token, query, variables=None):
         
         if 'errors' in data:
             print("❌ GraphQL Errors:", json.dumps(data['errors'], indent=2))
-            # Do not raise exception here, let the caller handle failure for optional features
             return {'errors': data['errors']}
             
         return data
@@ -119,48 +119,110 @@ def github_graphql_request(token, query, variables=None):
         print(f"❌ Error during GraphQL request: {e}")
     return {}
 
-# 🎯 FIX 1: New helper function to get the correct Project V2 Item ID (PVTI_...)
+# Fix for retrieving the ProjectV2Item ID (PVTI_...)
 def get_project_item_id(issue_node_id, project_node_id, github_token):
     """
     Queries GitHub to find the ProjectV2Item ID (PVTI_...) 
-    associated with an issue's node ID (I_...). This ID is required for updating fields.
+    associated with an issue's node ID (I_...) by querying the Issue's projects.
     """
     query = """
-    query GetProjectItem($projectId: ID!, $issueId: ID!) {
-      node(id: $projectId) {
-        ... on ProjectV2 {
-          # Use the Issue ID (I_...) to find the item in the project
-          item(contentId: $issueId) { 
-            id # This returns the ProjectV2Item ID (PVTI_...)
+    query GetProjectItem($issueId: ID!) {
+      node(id: $issueId) {
+        ... on Issue {
+          projectItems(first: 10) { 
+            nodes {
+              id # ProjectV2Item ID (PVTI_...)
+              project {
+                id # ProjectV2 ID (PVT_...)
+              }
+            }
           }
         }
       }
     }
     """
     variables = {
-        "projectId": project_node_id,
         "issueId": issue_node_id
     }
     
     response = github_graphql_request(github_token, query, variables)
     
-    # Safely extract the PVTI_... ID
     try:
         if 'errors' in response:
             return None
             
-        project_item = response.get('data', {}).get('node', {}).get('item')
-        if project_item and 'id' in project_item:
-            project_item_id = project_item['id']
-            # Optional: print for debugging
-            # print(f"✅ Resolved Issue ID {issue_node_id} to ProjectV2Item ID {project_item_id}")
-            return project_item_id
+        project_items = response.get('data', {}).get('node', {}).get('projectItems', {}).get('nodes', [])
         
-        # If 'item' is None, the issue is not on the board
+        for item in project_items:
+            if item.get('project', {}).get('id') == project_node_id:
+                return item.get('id')
+        
         return None
         
-    except (KeyError, TypeError, AttributeError):
+    except (KeyError, TypeError, AttributeError) as e:
+        print(f"Error parsing Project Item ID response: {e}")
         return None
+
+
+# 🆕 NEW FUNCTION: Fetch all Field/Option IDs dynamically
+def fetch_project_metadata(project_node_id, github_token):
+    """Fetches all field IDs and Single Select Option IDs for a project."""
+    global FIELD_ID_MAP
+    
+    query = """
+    query GetProjectFields($projectId: ID!) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          fields(first: 20) { # Fetch up to 20 fields
+            nodes {
+              ... on ProjectV2Field {
+                id
+                name
+              }
+              ... on ProjectV2SingleSelectField {
+                id
+                name
+                options {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    response = github_graphql_request(github_token, query, {"projectId": project_node_id})
+    
+    try:
+        if 'errors' in response:
+            raise Exception("Failed to fetch project fields metadata.")
+            
+        fields = response.get('data', {}).get('node', {}).get('fields', {}).get('nodes', [])
+        
+        for field in fields:
+            field_name = field.get('name')
+            field_id = field.get('id')
+            
+            if not field_name or not field_id:
+                continue
+
+            FIELD_ID_MAP[field_name] = {
+                'id': field_id,
+                'options': {}
+            }
+            
+            # Extract options if it's a Single Select Field
+            options = field.get('options')
+            if options:
+                for option in options:
+                    FIELD_ID_MAP[field_name]['options'][option['name'].strip()] = option['id']
+        
+        print(f"✅ Successfully fetched metadata for {len(FIELD_ID_MAP)} project fields.")
+    except Exception as e:
+        print(f"❌ Failed to parse project metadata: {e}")
+
 
 def choose_title(req):
     req_id = str(req.get('id', '')).strip()
@@ -204,48 +266,57 @@ def format_req_body(req):
 
 
 # -------------------------
-# Project Management Logic (UPDATED FOR DYNAMIC DISCOVERY)
+# Project Management Logic (DYNAMIC DISCOVERY)
 # -------------------------
 def initialize_project_ids(repo_full_name, github_token):
     """
-    Hardcoded Project and Field IDs for @Test Project.
+    Dynamically finds Project and Field IDs using names.
     """
     global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABEL
 
+    # 1. Hardcoded Project ID (Must be the Node ID, PVT_...)
     PROJECT_NODE_ID = "PVT_kwHOCWTIsM4BHvNr"
 
-    # --- System Requirement ID field ---
-    FIELD_ID_REQID = "PVTF_lAHOCWTIsM4BHvNrzg4Z25I"
+    # 2. Fetch all field metadata
+    fetch_project_metadata(PROJECT_NODE_ID, github_token)
 
-    # --- Priority field ---
-    FIELD_ID_PRIORITY = "PVTF_lAHOCWTIsM4BHvNrzg4a35w"
-    FIELD_ID_LABEL= "PVTSSF_lAHOCWTIsM4BHvNrzg4Z25M"
+    # 3. Lookup the Field IDs by name
+    FIELD_ID_REQID = FIELD_ID_MAP.get("System Requirement ID", {}).get("id")
+    FIELD_ID_PRIORITY = FIELD_ID_MAP.get("Priority", {}).get("id")
+    FIELD_ID_LABEL = FIELD_ID_MAP.get("Requirement Label", {}).get("id")
 
 
-    print("✅ Using hardcoded project + field configuration")
-    print(f"   Project ID: {PROJECT_NODE_ID}")
-    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
-    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
+    if not FIELD_ID_REQID:
+        print("❌ Field 'System Requirement ID' not found on the project.")
+    if not FIELD_ID_PRIORITY:
+        print("❌ Field 'Priority' not found on the project.")
+    if not FIELD_ID_LABEL:
+        print("❌ Field 'Requirement Label' not found on the project.")
+
+    print("✅ Initialized project configuration using dynamic lookup.")
+    print(f"   Project ID: {PROJECT_NODE_ID}")
+    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
+    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
+    print(f"   Requirement Label Field ID: {FIELD_ID_LABEL}")
 
     
 
-# 🎯 FIX 2: Resolve Project V2 Item ID inside the function
-# The argument 'item_id_or_node' is the Issue Node ID (I_...) passed from sync_reqif_to_github
-def set_issue_project_fields(req, item_id_or_node, github_token):
+# 🎯 FIX: Updated to handle Priority as a Single Select field using the dynamic map.
+def set_issue_project_fields(req, issue_node_id, github_token):
     """
     Assigns Project V2 fields by first resolving the Issue ID (I_...) to the 
     required Project V2 Item ID (PVTI_...).
     """
     
-    # Use the passed argument (Issue Node ID) to find the Project V2 Item ID
-    project_item_id = get_project_item_id(item_id_or_node, PROJECT_NODE_ID, github_token)
+    # Use the Issue Node ID to find the Project V2 Item ID (PVTI_...)
+    project_item_id = get_project_item_id(issue_node_id, PROJECT_NODE_ID, github_token)
     
     if not project_item_id:
         print(f"⚠️ Skipping project field update for {req.get('id', 'Unknown Req')}: Item not found on Project V2 board.")
-        return # Cannot update fields if the item is not on the board
+        return 
 
     # -----------------------------------------------------------------
-    # Step 2: Set "System Requirement ID" (Text)
+    # Step 2: Set "System Requirement ID" (Text Field)
     # -----------------------------------------------------------------
     sys_req_id = req.get("id") or req.get("ID")
     if FIELD_ID_REQID and sys_req_id:
@@ -259,7 +330,7 @@ def set_issue_project_fields(req, item_id_or_node, github_token):
         """
         github_graphql_request(github_token, query_set_sys_id, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
+            "itemId": project_item_id, 
             "fieldId": FIELD_ID_REQID,
             "value": str(sys_req_id)
         })
@@ -268,7 +339,11 @@ def set_issue_project_fields(req, item_id_or_node, github_token):
     # -----------------------------------------------------------------
     # Step 3: Set "Requirement Label" (Single Select = 'System Requirement')
     # -----------------------------------------------------------------
-    if FIELD_ID_LABEL:
+    # We must look up the Option ID for 'System Requirement' dynamically
+    req_label_data = FIELD_ID_MAP.get("Requirement Label", {})
+    option_id_label = req_label_data.get("options", {}).get("System Requirement")
+    
+    if FIELD_ID_LABEL and option_id_label:
         query_set_label = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
           updateProjectV2ItemFieldValue(input: {
@@ -279,36 +354,39 @@ def set_issue_project_fields(req, item_id_or_node, github_token):
         """
         github_graphql_request(github_token, query_set_label, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
+            "itemId": project_item_id, 
             "fieldId": FIELD_ID_LABEL,
-            "optionId": "ccd91893" # <-- 'System Requirement' option ID
+            "optionId": option_id_label 
         })
         print("-> Set 'Requirement Label' to: System Requirement")
 
     # -----------------------------------------------------------------
-    # Step 4: Set "Priority" (Text)
+    # Step 4: Set "Priority" (Single Select Field)
     # -----------------------------------------------------------------
-    priority_text = None
-    attrs = req.get("attributes")
-    if isinstance(attrs, dict):
-        priority_text = attrs.get("Priority") or attrs.get("PRIORITY")
+    priority_text = (req.get("attributes") or {}).get("Priority") or (req.get("attributes") or {}).get("PRIORITY")
 
-    if FIELD_ID_PRIORITY and priority_text:
-        query_set_priority_text = """
-        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+    priority_data = FIELD_ID_MAP.get("Priority", {})
+    option_id_priority = priority_data.get("options", {}).get(priority_text)
+    
+    if FIELD_ID_PRIORITY and priority_text and option_id_priority:
+        # Use the same Single Select mutation as for the label
+        query_set_priority = """
+        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
           updateProjectV2ItemFieldValue(input: {
             projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
-            value: { text: $value }
+            value: { singleSelectOptionId: $optionId }
           }) { projectV2Item { id } }
         }
         """
-        github_graphql_request(github_token, query_set_priority_text, {
+        github_graphql_request(github_token, query_set_priority, {
             "projectId": PROJECT_NODE_ID,
-            "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
+            "itemId": project_item_id,
             "fieldId": FIELD_ID_PRIORITY,
-            "value": str(priority_text)
+            "optionId": option_id_priority
         })
-        print(f"-> Set 'Priority' (Text) to: {priority_text}")
+        print(f"-> Set 'Priority' (Single Select) to: {priority_text}")
+    elif FIELD_ID_PRIORITY and priority_text:
+        print(f"⚠️ Priority '{priority_text}' not found as a selectable option in the project.")
 
 
 # -------------------------
@@ -419,7 +497,6 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for existing issue
                 if PROJECT_NODE_ID and issue.get('node_id'):
-                    # The function set_issue_project_fields will now correctly resolve the Project V2 Item ID
                     set_issue_project_fields(req, issue['node_id'], github_token)
 
             else:
@@ -428,7 +505,6 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for new issue
                 if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
-                    # The function set_issue_project_fields will now correctly resolve the Project V2 Item ID
                     set_issue_project_fields(req, new_issue_json['node_id'], github_token)
 
         # Close removed issues
@@ -440,11 +516,6 @@ def sync_reqif_to_github():
     except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
-
-
-if __name__ == "__main__":
-    sync_reqif_to_github()
-
 
 
 if __name__ == "__main__":
