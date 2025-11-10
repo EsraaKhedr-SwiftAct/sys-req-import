@@ -281,7 +281,7 @@ def set_issue_project_fields(req, item_id_or_node, github_token):
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id, # ✅ NOW THIS IS THE CORRECT PVTI_... ID
             "fieldId": FIELD_ID_LABEL,
-            "optionId": "ccd91893"  # <-- 'System Requirement' option ID
+            "optionId": "ccd91893" # <-- 'System Requirement' option ID
         })
         print("-> Set 'Requirement Label' to: System Requirement")
 
