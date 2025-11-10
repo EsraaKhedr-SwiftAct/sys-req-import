@@ -164,6 +164,37 @@ def get_project_item_id(issue_node_id, project_node_id, github_token):
         return None
 
 
+# 🆕 NEW FUNCTION: Explicitly add issue to Project V2 and get the item ID
+def add_issue_to_project(issue_node_id, project_node_id, github_token):
+    """Adds a new issue to the specified Project V2 and returns the Project Item ID."""
+    query = """
+    mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
+      addProjectV2ItemById(input: {
+        projectId: $projectId, contentId: $contentId
+      }) {
+        item {
+          id
+        }
+      }
+    }
+    """
+    variables = {
+        "projectId": project_node_id,
+        "contentId": issue_node_id
+    }
+
+    response = github_graphql_request(github_token, query, variables)
+    
+    try:
+        # Returns the new PVTI_... ID directly
+        item_id = response['data']['addProjectV2ItemById']['item']['id']
+        print(f"✅ Issue added to Project. Item ID: {item_id}")
+        return item_id
+    except (KeyError, TypeError):
+        print("❌ Failed to add issue to project.")
+        return None
+
+
 # 🆕 NEW FUNCTION: Fetch all Field/Option IDs dynamically
 def fetch_project_metadata(project_node_id, github_token):
     """Fetches all field IDs and Single Select Option IDs for a project."""
@@ -301,20 +332,14 @@ def initialize_project_ids(repo_full_name, github_token):
 
     
 
-# 🎯 FIX: Updated to handle Priority as a Single Select field using the dynamic map.
-def set_issue_project_fields(req, issue_node_id, github_token):
+# 🎯 FIX: Renamed/Refactored to take Project Item ID directly
+def set_project_fields_with_item_id(req, project_item_id, github_token):
     """
-    Assigns Project V2 fields by first resolving the Issue ID (I_...) to the 
-    required Project V2 Item ID (PVTI_...).
+    Assigns Project V2 fields using the Project V2 Item ID (PVTI_...) directly.
     """
     
-    # Use the Issue Node ID to find the Project V2 Item ID (PVTI_...)
-    project_item_id = get_project_item_id(issue_node_id, PROJECT_NODE_ID, github_token)
+    # NOTE: The lookup to get PVTI_... from I_... has been moved to the caller.
     
-    if not project_item_id:
-        print(f"⚠️ Skipping project field update for {req.get('id', 'Unknown Req')}: Item not found on Project V2 board.")
-        return 
-
     # -----------------------------------------------------------------
     # Step 2: Set "System Requirement ID" (Text Field)
     # -----------------------------------------------------------------
@@ -388,6 +413,19 @@ def set_issue_project_fields(req, issue_node_id, github_token):
     elif FIELD_ID_PRIORITY and priority_text:
         print(f"⚠️ Priority '{priority_text}' not found as a selectable option in the project.")
 
+# 🆕 NEW FUNCTION: Wrapper for existing issues to handle lookup
+def set_issue_project_fields_for_existing(req, issue_node_id, github_token):
+    """
+    Handles Project Field setting for existing issues by first looking up the 
+    Project Item ID, which is necessary if the issue was added in a previous run.
+    """
+    project_item_id = get_project_item_id(issue_node_id, PROJECT_NODE_ID, github_token)
+    
+    if not project_item_id:
+        print(f"⚠️ Skipping project field update for {req.get('id', 'Unknown Req')}: Item not found on Project V2 board.")
+        return 
+        
+    set_project_fields_with_item_id(req, project_item_id, github_token)
 
 # -------------------------
 # GitHub issue management (UPDATED URLs)
@@ -497,7 +535,7 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for existing issue
                 if PROJECT_NODE_ID and issue.get('node_id'):
-                    set_issue_project_fields(req, issue['node_id'], github_token)
+                    set_issue_project_fields_for_existing(req, issue['node_id'], github_token)
 
             else:
                 # Issue creation returns full JSON object
@@ -505,7 +543,14 @@ def sync_reqif_to_github():
 
                 # Set Project Fields for new issue
                 if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
-                    set_issue_project_fields(req, new_issue_json['node_id'], github_token)
+                    issue_node_id = new_issue_json['node_id']
+                    
+                    # 🆕 STEP 1: Explicitly add the issue to the project
+                    project_item_id = add_issue_to_project(issue_node_id, PROJECT_NODE_ID, github_token)
+                    
+                    # 🆕 STEP 2: Use the returned Item ID to set the fields instantly
+                    if project_item_id:
+                        set_project_fields_with_item_id(req, project_item_id, github_token)
 
         # Close removed issues
         for req_id, issue in issue_map.items():
