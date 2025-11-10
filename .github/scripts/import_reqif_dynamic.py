@@ -187,103 +187,73 @@ def initialize_project_ids(repo_full_name, github_token):
 
     
 
-def set_issue_project_fields(github_token, issue_node_id, req):
-    """Adds the issue to the project and sets custom fields."""
-    if not PROJECT_NODE_ID:
-        return
-        
-    # --- Step 1: Add Issue to Project (Returns the ProjectV2Item ID) ---
-    query_add_item = """
-    mutation($projectId: ID!, $issueId: ID!) {
-      addProjectV2ItemById(input: {projectId: $projectId, contentId: $issueId}) {
-        item { id }
-      }
-    }
+def set_issue_project_fields(req, project_item_id, github_token):
     """
-    project_item_id = None
-    
-    data = github_graphql_request(github_token, query_add_item, {
-        "projectId": PROJECT_NODE_ID, 
-        "issueId": issue_node_id
-    })
-
-    if data and 'data' in data and data['data'] and data['data'].get('addProjectV2ItemById') and data['data']['addProjectV2ItemById'].get('item'):
-        project_item_id = data['data']['addProjectV2ItemById']['item']['id']
-        print(f"-> Added issue to project. Project Item ID: {project_item_id}")
-    elif data and 'errors' in data and "already in this project" in str(data['errors']):
-        print(f"-> ⚠️ Item already in project. Skipping re-add.")
-        return
-    else:
-        print(f"-> ⚠️ Failed to add item to project. Skipping field update.")
-        return
+    Assigns System Requirement ID, Requirement Label (single-select), and Priority fields
+    for each requirement imported from ReqIF.
+    """
 
     # -----------------------------------------------------------------
-    # Step 2: Set "System Requirement ID" (Text field)
+    # Step 2: Set "System Requirement ID" (Text)
     # -----------------------------------------------------------------
-    if FIELD_ID_REQID and project_item_id:
-        req_id_value = req.get('id', '(No ID)')
-        query_set_text = """
+    sys_req_id = req.get("id")
+    if FIELD_ID_REQID and sys_req_id:
+        query_set_sys_id = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
           updateProjectV2ItemFieldValue(input: {
-            projectId: $projectId, itemId: $itemId, fieldId: $fieldId, 
+            projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
             value: { text: $value }
           }) { projectV2Item { id } }
         }
         """
-        github_graphql_request(github_token, query_set_text, {
+        github_graphql_request(github_token, query_set_sys_id, {
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id,
             "fieldId": FIELD_ID_REQID,
-            "value": req_id_value
+            "value": sys_req_id
         })
-        print(f"-> Set 'System Requirement ID' to: {req_id_value}")
+        print(f"-> Set 'System Requirement ID' to: {sys_req_id}")
 
     # -----------------------------------------------------------------
-    # Step 3: Set "Requirement Label" (Text field → Hardcoded)
+    # Step 3: Set "Requirement Label" (Single Select = 'System Requirement')
     # -----------------------------------------------------------------
-    if FIELD_ID_LABAL and project_item_id:
-        label_value = "System Requirement"  # Hardcoded
+    if FIELD_ID_LABEL:
         query_set_label = """
-        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
           updateProjectV2ItemFieldValue(input: {
-            projectId: $projectId, itemId: $itemId, fieldId: $fieldId, 
-            value: { text: $value }
+            projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+            value: { singleSelectOptionId: $optionId }
           }) { projectV2Item { id } }
         }
         """
         github_graphql_request(github_token, query_set_label, {
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id,
-            "fieldId": FIELD_ID_LABAL,
-            "value": label_value
+            "fieldId": FIELD_ID_LABEL,
+            "optionId": "ccd91893"  # <-- 'System Requirement' option ID
         })
-        print(f"-> Set 'Requirement Label' to: {label_value}")
+        print("-> Set 'Requirement Label' to: System Requirement")
 
     # -----------------------------------------------------------------
-    # Step 4: Set "Priority" (Single Select field from ReqIF)
+    # Step 4: Set "Priority" (Text)
     # -----------------------------------------------------------------
     priority_text = req["attributes"].get("Priority") or req["attributes"].get("PRIORITY")
     if FIELD_ID_PRIORITY and priority_text:
-        if priority_text in PRIORITY_OPTIONS:
-            option_id = PRIORITY_OPTIONS[priority_text]
-            query_set_priority = """
-            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $projectId, itemId: $itemId, fieldId: $fieldId, 
-                value: { singleSelectOptionId: $optionId }
-              }) { projectV2Item { id } }
-            }
-            """
-            github_graphql_request(github_token, query_set_priority, {
-                "projectId": PROJECT_NODE_ID,
-                "itemId": project_item_id,
-                "fieldId": FIELD_ID_PRIORITY,
-                "optionId": option_id
-            })
-            print(f"-> Set 'Priority' to: {priority_text}")
-        else:
-            print(f"-> ⚠️ Priority '{priority_text}' not found among project options. Skipped.")
-
+        query_set_priority_text = """
+        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+          updateProjectV2ItemFieldValue(input: {
+            projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+            value: { text: $value }
+          }) { projectV2Item { id } }
+        }
+        """
+        github_graphql_request(github_token, query_set_priority_text, {
+            "projectId": PROJECT_NODE_ID,
+            "itemId": project_item_id,
+            "fieldId": FIELD_ID_PRIORITY,
+            "value": priority_text
+        })
+        print(f"-> Set 'Priority' (Text) to: {priority_text}")
 
 # -------------------------
 # GitHub issue management (UPDATED URLs)
