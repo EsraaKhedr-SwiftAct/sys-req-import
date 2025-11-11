@@ -85,7 +85,7 @@ PROJECT_NODE_ID = None
 FIELD_ID_REQID = None
 FIELD_ID_PRIORITY = None
 FIELD_ID_LABEL = None 
-FIELD_ID_MAP = {} # 🆕 NEW: Stores all dynamically resolved field metadata (name -> IDs)
+FIELD_ID_MAP = {} # Stores all dynamically resolved field metadata (name -> IDs)
 
 
 def github_headers(token):
@@ -438,12 +438,11 @@ def set_issue_project_fields(req, issue_node_id, github_token):
 
 
 # -------------------------
-# GitHub issue management (UPDATED URLs)
+# GitHub issue management (UPDATED URLS AND LABELS)
 # -------------------------
 def get_existing_issues(repo, token):
-    # FIXED URL: Prepends /repos/
-    # We still filter by a label to limit scope, and the script MUST use the title to map ReqID.
-    url = f"{GITHUB_API_URL}/repos/{repo}/issues?state=all&labels=reqif-import&per_page=100" 
+    # 🟢 Filter issues using ONLY the 'System Requirement' label. This must be the label used for all managed issues.
+    url = f"{GITHUB_API_URL}/repos/{repo}/issues?state=all&labels=System Requirement&per_page=100"
     issues = []
     while url:
         resp = requests.get(url, headers=github_headers(token))
@@ -457,8 +456,8 @@ def create_issue(repo, token, req):
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
         "body": format_req_body(req),
-        # 🟢 ADDED: "System Requirement" label for all new issues
-        "labels": ["requirement", "reqif-import", "System Requirement"], 
+        # 🟢 Enforce ONLY one label for new issues
+        "labels": ["System Requirement"],
     }
     # FIXED URL: Prepends /repos/
     resp = requests.post(f"{GITHUB_API_URL}/repos/{repo}/issues", headers=github_headers(token), json=data)
@@ -473,19 +472,20 @@ def create_issue(repo, token, req):
 
 
 def update_issue(repo, token, issue_number, req):
+    # This function updates content AND enforces the single label
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
         "body": format_req_body(req),
         "state": "open",
-        # 🟢 MODIFIED: Ensure these labels are always present on update.
-        "labels": ["requirement", "reqif-import", "System Requirement"], 
+        # 🟢 Enforce ONLY one label, removing any others, on update
+        "labels": ["System Requirement"], 
     }
     # FIXED URL: Prepends /repos/
     resp = requests.patch(f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
     if resp.status_code >= 300:
         print(f"❌ Failed to update issue #{issue_number}: {resp.text}")
     else:
-        print(f"♻️ Updated issue #{issue_number} ({req['id']}) - Labels enforced.")
+        print(f"♻️ Updated issue #{issue_number} ({req['id']}) - Content and single label enforced.")
     return resp.json()
 
 
@@ -509,7 +509,7 @@ def close_issue(repo, token, issue_number, req_id):
 
 
 # -------------------------
-# Main synchronization (UPDATED)
+# Main synchronization (Final Logic)
 # -------------------------
 def sync_reqif_to_github():
     github_token = os.getenv("GITHUB_TOKEN")
@@ -527,16 +527,15 @@ def sync_reqif_to_github():
 
     try:
         reqs = parse_reqif_requirements()
-        # Issues are fetched using the 'reqif-import' label
+        # Issues are now filtered by the 'System Requirement' label
         issues = get_existing_issues(repo_full_name, github_token) 
 
         # Map existing issues by ReqIF ID
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
-            # Only process issues with the expected title format, regardless of other labels.
+            # Only process issues with the expected title format
             if title.startswith("[") and "]" in title:
-                # 🟢 FIX: Use strip() to ensure ReqID is clean (e.g., handles [SO_1] or extra spaces)
                 req_id = title.split("]")[0][1:].strip()
                 issue_map[req_id] = issue
             if not issue.get('node_id'):
@@ -546,11 +545,14 @@ def sync_reqif_to_github():
         for req_id, req in reqs.items():
             if req_id in issue_map:
                 issue = issue_map[req_id]
-                # Update issue details if body or title changed (or to enforce labels)
-                # Note: Labels are now enforced inside update_issue
-                update_issue(repo_full_name, github_token, issue["number"], req)
 
-                # Set Project Fields for existing issue (now handles missing item addition)
+                # 🟢 FINAL LOGIC: UNCONDITIONALLY update the issue if found in ReqIF.
+                # This ensures:
+                # 1. Content is synchronized if changed.
+                # 2. The single 'System Requirement' label is enforced (old labels are removed), even if content didn't change.
+                update_issue(repo_full_name, github_token, issue["number"], req)
+                
+                # Set Project Fields for existing issue
                 if PROJECT_NODE_ID and issue.get('node_id'):
                     set_issue_project_fields(req, issue['node_id'], github_token)
 
@@ -565,6 +567,7 @@ def sync_reqif_to_github():
         # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
+                # Closure uses the list filtered by 'System Requirement'
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
 
         print("✅ Synchronization complete.")
