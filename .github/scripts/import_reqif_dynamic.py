@@ -453,13 +453,12 @@ def get_existing_issues(repo, token):
 
 
 def create_issue(repo, token, req):
+    # Ensure all newly created issues use the expected format: [ID] Title
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
         "body": format_req_body(req),
-        # 🟢 Enforce ONLY one label for new issues
         "labels": ["System Requirement"],
     }
-    # FIXED URL: Prepends /repos/
     resp = requests.post(f"{GITHUB_API_URL}/repos/{repo}/issues", headers=github_headers(token), json=data)
     
     if resp.status_code >= 300:
@@ -468,19 +467,17 @@ def create_issue(repo, token, req):
     else:
         new_issue = resp.json()
         print(f"🆕 Created issue #{new_issue['number']} for {req['id']}")
-        return new_issue # Return full JSON (which contains node_id)
+        return new_issue
 
 
 def update_issue(repo, token, issue_number, req):
-    # This function updates content AND enforces the single label
+    # Enforce the proper title format and single label on all updates
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
         "body": format_req_body(req),
         "state": "open",
-        # 🟢 Enforce ONLY one label, removing any others, on update
         "labels": ["System Requirement"], 
     }
-    # FIXED URL: Prepends /repos/
     resp = requests.patch(f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
     if resp.status_code >= 300:
         print(f"❌ Failed to update issue #{issue_number}: {resp.text}")
@@ -490,26 +487,23 @@ def update_issue(repo, token, issue_number, req):
 
 
 def close_issue(repo, token, issue_number, req_id):
-    # 'repo' is the full name, e.g., 'owner/repo-name'
-    
-    # FIXED URL: Prepends /repos/
     url = f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}"
     
     data = {
         "state": "closed",
-        "state_reason": "not_planned" # Good practice for removed requirements
+        "state_reason": "not_planned"
     }
     
     resp = requests.patch(url, headers=github_headers(token), json=data)
     
-    if resp.status_code >= 400: # Check for 4xx errors
+    if resp.status_code >= 400:
         print(f"❌ Failed to close issue #{issue_number} (Status: {resp.status_code}). Response: {resp.text}")
     else:
         print(f"🔒 Closed issue #{issue_number} ({req_id})")
 
 
 # -------------------------
-# Main synchronization (Final Logic)
+# Main synchronization (Modified Issue Mapping)
 # -------------------------
 def sync_reqif_to_github():
     github_token = os.getenv("GITHUB_TOKEN")
@@ -523,33 +517,42 @@ def sync_reqif_to_github():
         initialize_project_ids(repo_full_name, github_token)
     except Exception as e:
         print(f"❌ Project initialization failed: {e}")
-        # PROJECT_NODE_ID will be None, skipping project integration
 
     try:
         reqs = parse_reqif_requirements()
-        # Issues are now filtered by the 'System Requirement' label
         issues = get_existing_issues(repo_full_name, github_token) 
 
         # Map existing issues by ReqIF ID
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
-            # Only process issues with the expected title format
+            req_id = None
+            
+            # 1. Try format: [ID] Title (The script's intended format)
             if title.startswith("[") and "]" in title:
                 req_id = title.split("]")[0][1:].strip()
+            
+            # 2. 🟢 NEW: Try format: ID: Title (To catch issues like "_SO_1: ...")
+            elif ":" in title:
+                # Get everything before the first colon and strip whitespace
+                temp_id = title.split(":")[0].strip()
+                # Simple check to ensure we didn't accidentally grab a full sentence
+                if 0 < len(temp_id.split()) <= 3: 
+                    req_id = temp_id
+
+            if req_id:
                 issue_map[req_id] = issue
-            if not issue.get('node_id'):
-                print(f"⚠️ Warning: Issue #{issue['number']} is missing 'node_id'. Project sync will be skipped for this issue.")
+            else:
+                # Only warn if the issue has the required label but doesn't match a format
+                print(f"⚠️ Warning: Issue #{issue.get('number')} with title '{title}' skipped. Title does not match a recognizable ID format ([ID] Title or ID: Title).")
+
 
         # Create or update issues
         for req_id, req in reqs.items():
             if req_id in issue_map:
                 issue = issue_map[req_id]
 
-                # 🟢 FINAL LOGIC: UNCONDITIONALLY update the issue if found in ReqIF.
-                # This ensures:
-                # 1. Content is synchronized if changed.
-                # 2. The single 'System Requirement' label is enforced (old labels are removed), even if content didn't change.
+                # UNCONDITIONALLY update the issue if found in ReqIF.
                 update_issue(repo_full_name, github_token, issue["number"], req)
                 
                 # Set Project Fields for existing issue
@@ -567,7 +570,6 @@ def sync_reqif_to_github():
         # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
-                # Closure uses the list filtered by 'System Requirement'
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
 
         print("✅ Synchronization complete.")
