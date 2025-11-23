@@ -50,20 +50,20 @@ def perform_schema_detection(reqif_attrs):
     new_attr_found = False
 
     # Normalize existing config keys
-    # This ensures old, non-normalized keys in the JSON config are converted
-    # to their normalized form before comparison/saving.
-    normalized_config = {}
-    for k, v in config_attrs.items():
-        normalized_config[str(k).strip()] = v
+    normalized_config = {str(k).strip(): v for k, v in config_attrs.items()}
     config_attrs.clear()
     config_attrs.update(normalized_config)
 
-    # Track attributes that are in the config but not in the current ReqIF
+    # Track attributes in config but not in current ReqIF
     config_keys = set(config_attrs.keys())
 
     # Detect new normalized attributes
-    for attr_name in sorted(list(reqif_attrs)):
+    for attr_name in sorted(reqif_attrs):
         key = str(attr_name).strip()  # normalized key
+
+        # ✅ Skip __parent__ and __children__ if they are not in this ReqIF
+        if key in ("__parent__", "__children__") and key not in reqif_attrs:
+            continue
 
         if key not in config_attrs:
             config_attrs[key] = {
@@ -76,19 +76,17 @@ def perform_schema_detection(reqif_attrs):
             new_attr_found = True
             print(f"📢 Detected new normalized attribute: '{key}'. Added to config.")
 
-        # Remove found attributes from config_keys
         config_keys.discard(key)
 
-    # Optional: handle attributes in config that are no longer present in ReqIF
-# Remove attributes from config that are no longer in the ReqIF
-    for attr_name in list(config_keys):  # iterate over a copy
+    # Remove attributes from config no longer in ReqIF
+    for attr_name in list(config_keys):
         print(f"🗑️ Removing obsolete attribute from config: '{attr_name}'")
         config_attrs.pop(attr_name, None)
 
-
-    # ALWAYS save config after normalization
+    # Save config after normalization
     if IS_DRY_RUN and (new_attr_found or normalized_config):
         save_config(config)
+
 
 # -------------------------
 # Parse .reqif files
@@ -169,9 +167,16 @@ def parse_reqif_requirements():
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
-    
-    # 🆕 Run schema detection after parsing
-    perform_schema_detection(all_unique_attrs) 
+
+    # --- Add hierarchy attributes only if SPEC-HIERARCHY exists ---
+    has_hierarchy = any(getattr(req, "children", []) for req in req_objects)
+    if has_hierarchy:
+        all_unique_attrs.add("__children__")
+        all_unique_attrs.add("__parent__")
+
+    # Run schema detection after parsing
+    perform_schema_detection(all_unique_attrs)
+
 
     return req_dict
 
@@ -398,7 +403,9 @@ def format_req_body(req):
     show_description = config_attrs.get("Description", {}).get("include_in_body", True)
     show_id = config_attrs.get("ID", {}).get("include_in_body", True)
     show_title = config_attrs.get("Title", {}).get("include_in_body", True)
-
+ 
+     # NEW → global description flag
+    include_description = config.get("include_description", True)
     desc = req.get("description", "(No description found)").strip()
     
     # --- FIX: Clean description of Priority mentions before display ---
@@ -413,7 +420,7 @@ def format_req_body(req):
     body = f"**Requirement ID:** `{req.get('id', '(No ID)')}`\n\n"
 
     # 2. Conditionally add the Description section
-    if show_description :#and config_attrs.get("Description", {}).get("include_in_body", True)
+    if include_description and show_description :#and config_attrs.get("Description", {}).get("include_in_body", True)
         body += f"### 📝 Description\n{desc}\n\n"
 
         
@@ -443,17 +450,23 @@ def format_req_body(req):
 
     # Build attributes table
     for k, v in filtered_attrs.items():
+        # Skip core fields completely
         if k in CORE_FIELDS:
             continue
+
+        # EXTRA FIX: Ensure Description never appears again in the attributes table
+        if k.lower() == "description":
+            continue
+
         safe_v = str(v).replace("\n", " ").replace("|", "\\|")
-        table_lines.append(f"| {k} | {safe_v} |")    
+        table_lines.append(f"| {k} | {safe_v} |")
 
     # Only append the table if there is content beyond the headers
-    if len(table_lines) > 3: # 3 lines are the header, separator, and section title
+    if len(table_lines) > 3:  # header + separator + section title
         body += "\n".join(table_lines)
     else:
-        # If no attributes are configured to show, just add a note
         body += "### 📄 Attributes\n(No attributes configured to display.)"
+
 
 
     return body.strip()
