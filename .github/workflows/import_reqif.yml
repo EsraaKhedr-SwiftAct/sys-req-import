@@ -1,19 +1,16 @@
 name: Import ReqIF
 
 on:
-  # Trigger workflow automatically when the config changes
   push:
     paths:
       - 'reqif_config.json'
-      
-  # Manual trigger
   workflow_dispatch:
     inputs:
       reqif-file:
         description: 'ReqIF file to import'
         required: true
         default: 'sample.reqif'
-        
+
 permissions:
   contents: read
   issues: write
@@ -41,20 +38,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          # --- Clean PROJECT_OWNER and PROJECT_TITLE secrets ---
-          PROJECT_OWNER=$(echo "${{ secrets.PROJECT_OWNER }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          PROJECT_TITLE=$(echo "${{ secrets.PROJECT_TITLE }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          # Trim secrets and environment variables
+          PROJECT_OWNER=$(echo "${{ secrets.PROJECT_OWNER }}" | tr -d '\n' | xargs)
+          PROJECT_TITLE=$(echo "${{ secrets.PROJECT_TITLE }}" | tr -d '\n' | xargs)
+          REPO_FULL_NAME=$(echo "$GITHUB_REPOSITORY" | tr -d '\n' | xargs)
 
-          # --- Clean GITHUB_REPOSITORY environment variable ---
-          REPO_FULL_NAME=$(echo "$GITHUB_REPOSITORY" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-          echo "Running script for project: $PROJECT_OWNER/$PROJECT_TITLE"
-          echo "Repository: $REPO_FULL_NAME"
-
-          # Export cleaned variables so Python script can read them
+          # Export trimmed variables for Python
           export PROJECT_OWNER
           export PROJECT_TITLE
           export GITHUB_REPOSITORY=$REPO_FULL_NAME
 
-          # Execute the Python script
+          echo "Running script for project: $PROJECT_OWNER/$PROJECT_TITLE"
+          echo "Repository: $REPO_FULL_NAME"
+
+          # Run the Python script
           python .github/scripts/import_reqif_dynamic.py
+

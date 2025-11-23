@@ -18,7 +18,7 @@
         },
         "__children__": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
-            "include_in_body": true
+            "include_in_body": false
         },
         "__parent__": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
