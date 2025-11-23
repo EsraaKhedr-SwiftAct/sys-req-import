@@ -6,19 +6,104 @@ import traceback
 import requests
 import html
 import json
+from collections import defaultdict
+import re # <-- ADDED: Necessary for regular expression cleaning
 
 # Universal ReqIF parser
-from reqif_parser_full import ReqIFParser # Must handle EA/Polarion/DOORS/Jama
+# NOTE: This script assumes 'reqif_parser_full' is available in the Python environment path.
+from reqif_parser_full import ReqIFParser 
+
+# --- CONFIGURATION FILE GLOBALS ---
+CONFIG_FILE = os.path.join(os.getcwd(), "reqif_config.json")
+
+
+def load_config():
+    """Loads the requirement configuration from a JSON file."""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            try:
+                # Use a default structure if file is empty or malformed
+                config = json.load(f)
+                config.setdefault("attributes", {})
+                return config
+            except json.JSONDecodeError:
+                print("⚠️ Warning: Could not decode existing config file. Starting fresh.")
+                return {"attributes": {}}
+    return {"attributes": {}}
+
+def save_config(config):
+    """Saves the requirement configuration to a JSON file."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4, sort_keys=True)
+    print(f"✅ Updated {CONFIG_FILE}. **MANUAL ACTION REQUIRED:** Review and commit this file to apply schema changes.")
+
+# -------------------------
+# Schema Management
+# -------------------------
+def perform_schema_detection(reqif_attrs):
+    """Detects new attributes and updates the config file using normalized keys."""
+    config = load_config()
+    config_attrs = config.setdefault("attributes", {})
+    new_attr_found = False
+
+    # Normalize existing config keys
+    # This ensures old, non-normalized keys in the JSON config are converted
+    # to their normalized form before comparison/saving.
+    normalized_config = {}
+    for k, v in config_attrs.items():
+        normalized_config[str(k).strip()] = v
+    config_attrs.clear()
+    config_attrs.update(normalized_config)
+
+    # Track attributes that are in the config but not in the current ReqIF
+    config_keys = set(config_attrs.keys())
+
+    # Detect new normalized attributes
+    for attr_name in sorted(list(reqif_attrs)):
+        key = str(attr_name).strip()  # normalized key
+
+        if key not in config_attrs:
+            config_attrs[key] = {
+                "include_in_body": True,
+                "description": (
+                    "Auto-detected attribute. Change 'include_in_body' to false "
+                    "to hide in GitHub issue body."
+                ),
+            }
+            new_attr_found = True
+            print(f"📢 Detected new normalized attribute: '{key}'. Added to config.")
+
+        # Remove found attributes from config_keys
+        config_keys.discard(key)
+
+    # Optional: handle attributes in config that are no longer present in ReqIF
+    for attr_name in config_keys:
+        if "description" in config_attrs[attr_name]:  # avoid removing manually added attrs
+            # Example: mark as missing
+            # config_attrs[attr_name]["missing"] = True
+            pass
+
+    # ALWAYS save config after normalization
+    if IS_DRY_RUN and (new_attr_found or normalized_config):
+        save_config(config)
 
 # -------------------------
 # Parse .reqif files
 # -------------------------
 def parse_reqif_requirements():
-    reqif_files = glob.glob("*.reqif")
+    # --- FIX: Search in the repo root (../../) AND the current directory ---
+    repo_root = "../../"
+    reqif_files = glob.glob(os.path.join(repo_root, "*.reqif")) + \
+                  glob.glob(os.path.join(repo_root, "*.reqifz"))
+    
+    # Fallback to current directory search (for local testing flexibility)
     if not reqif_files:
-        print("❌ No .reqif file found in current directory.")
+        reqif_files = glob.glob("*.reqif") + glob.glob("*.reqifz")
+    
+    if not reqif_files:
+        print("❌ No .reqif or .reqifz file found in current directory OR in the repo root (../../).") 
         sys.exit(1)
-
+    
     reqif_file = reqif_files[0]
     print(f"📄 Parsing ReqIF file: {reqif_file}")
 
@@ -26,6 +111,8 @@ def parse_reqif_requirements():
     req_objects = parser.parse()
 
     req_dict = {}
+    all_unique_attrs = set() # 🆕 Set to track all unique attribute names
+
     for i, req in enumerate(req_objects):
 
         # Convert object attributes
@@ -43,10 +130,18 @@ def parse_reqif_requirements():
         title = html.unescape(title)
         description = html.unescape(description)
 
-        # Normalize custom attributes
+        # FIX 2: Replace non-breaking space (\xa0) with a regular space to prevent API errors
+        if isinstance(title, str):
+            title = title.replace('\xa0', ' ')
+        if isinstance(description, str):
+            description = description.replace('\xa0', ' ')
+
+        # Normalize custom attributes and track unique names
         normalized_attrs = {}
         for k, v in attributes.items():
-            normalized_attrs[str(k).strip()] = str(v).strip() if v is not None else "(No value)"
+            key = str(k).strip()
+            normalized_attrs[key] = str(v).strip() if v is not None else "(No value)"
+            all_unique_attrs.add(key) # 🆕 Track unique attribute key
 
         # Ensure required fields always exist
         normalized_attrs.setdefault("ID", req_id)
@@ -71,13 +166,16 @@ def parse_reqif_requirements():
         }
 
     print(f"✅ Parsed {len(req_dict)} requirements.")
+    
+    # 🆕 Run schema detection after parsing
+    perform_schema_detection(all_unique_attrs) 
+
     return req_dict
 
 
 # -------------------------
 # GitHub helpers
 # -------------------------
-# FIXED: Base URL for both REST and GraphQL
 GITHUB_API_URL = "https://api.github.com"
 
 # --- GLOBAL PROJECT & GRAPHQL VARIABLES ---
@@ -85,11 +183,15 @@ PROJECT_NODE_ID = None
 FIELD_ID_REQID = None
 FIELD_ID_PRIORITY = None
 FIELD_ID_LABEL = None 
-FIELD_ID_MAP = {} # Stores all dynamically resolved field metadata (name -> IDs)
+FIELD_ID_STATUS = None # 🆕 ADDED: Global variable for the Status Field ID
+FIELD_ID_MAP = {} 
+
+# --- NEW: GLOBAL DRY RUN FLAG ---
+IS_DRY_RUN = False 
+# ---------------------------------
 
 
 def github_headers(token):
-    # FIXED: Using Bearer token for better compatibility with GraphQL and modern REST
     return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
 
 
@@ -101,10 +203,10 @@ def github_graphql_request(token, query, variables=None):
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    payload = {"query": query, "variables": variables or {}}
+    payload = {"query": query, "variables": variables or {} }
     
     try:
-        resp = requests.post(url, headers=headers, json=payload)
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         
@@ -131,9 +233,9 @@ def get_project_item_id(issue_node_id, project_node_id, github_token):
         ... on Issue {
           projectItems(first: 10) { 
             nodes {
-              id # ProjectV2Item ID (PVTI_...)
+              id 
               project {
-                id # ProjectV2 ID (PVT_...)
+                id 
               }
             }
           }
@@ -154,6 +256,7 @@ def get_project_item_id(issue_node_id, project_node_id, github_token):
         project_items = response.get('data', {}).get('node', {}).get('projectItems', {}).get('nodes', [])
         
         for item in project_items:
+            # Check if the item belongs to the specific project ID
             if item.get('project', {}).get('id') == project_node_id:
                 return item.get('id')
         
@@ -177,16 +280,16 @@ def add_issue_to_project(issue_node_id, project_node_id, github_token):
     """
     variables = {
         "projectId": project_node_id,
-        "contentId": issue_node_id # The Issue Node ID (I_...) is the content ID
+        "contentId": issue_node_id 
     }
     
     response = github_graphql_request(github_token, query, variables)
     
-    # Check if the project item ID was returned
     if response.get('data', {}).get('addProjectV2ItemById', {}).get('item', {}).get('id'):
         print(f"🔗 Successfully added issue ({issue_node_id}) to project.")
         return True
     else:
+        # Avoid printing full error text unless required, usually covered by github_graphql_request
         print(f"❌ Failed to add issue ({issue_node_id}) to project. Check GraphQL errors above.")
         return False
 
@@ -199,7 +302,7 @@ def fetch_project_metadata(project_node_id, github_token):
     query GetProjectFields($projectId: ID!) {
       node(id: $projectId) {
         ... on ProjectV2 {
-          fields(first: 20) { # Fetch up to 20 fields
+          fields(first: 20) { 
             nodes {
               ... on ProjectV2Field {
                 id
@@ -227,6 +330,7 @@ def fetch_project_metadata(project_node_id, github_token):
             
         fields = response.get('data', {}).get('node', {}).get('fields', {}).get('nodes', [])
         
+        FIELD_ID_MAP.clear() # Clear map before population
         for field in fields:
             field_name = field.get('name')
             field_id = field.get('id')
@@ -258,35 +362,96 @@ def choose_title(req):
     desc = (req.get('description') or '').strip()
     for line in desc.splitlines():
         clean = line.strip()
+        # Find a clean line that is not the ID and has at least 3 words
         if clean and clean.upper() != req_id.upper() and len(clean.split()) >= 3:
             return clean
     return title or req_id
 
 
 # -------------------------
-# Improved formatting (full attribute table)
+# Improved formatting (full attribute table using config)
 # -------------------------
 def format_req_body(req):
+    
+    config = load_config() 
+    config_attrs = config.get("attributes", {})
+    # DEBUG: Print all attributes and config
+    print("DEBUG RAW ATTR KEYS:", repr(list(req.get("attributes", {}).keys())))
+    print("DEBUG RAW CONFIG KEYS:", repr(list(config_attrs.keys())))
+
+    print(f"DEBUG: All attributes for {req.get('id')}: {list(req.get('attributes', {}).keys())}")
+    print(f"DEBUG: Config attributes: {list(config_attrs.keys())}")
+    if 'Priority' in req.get('attributes', {}):
+        priority_config = config_attrs.get('Priority', {})
+        print(f"DEBUG: Priority attribute found, config: {priority_config}")
+        print(f"DEBUG: Priority value: {req.get('attributes', {}).get('Priority')}")    
+   
+    # Define core fields and internal fields that might appear in the attributes dictionary
+    # and whose display is controlled by the config.
+    CORE_FIELDS = {"ID", "Title", "Description"}
+    
+    # 1. Check config for the core fields
+    # Defaulting to True for backward compatibility if the attribute is missing from config
+    show_description = config_attrs.get("Description", {}).get("include_in_body", True)
+    show_id = config_attrs.get("ID", {}).get("include_in_body", True)
+    show_title = config_attrs.get("Title", {}).get("include_in_body", True)
+
     desc = req.get("description", "(No description found)").strip()
+    
+    # --- FIX: Clean description of Priority mentions before display ---
+    # This prevents 'Priority: High' from showing up if it was embedded in the raw ReqIF description
+    # This regex removes patterns like "Priority: High", "priority=medium", etc., usually found on a single line.
+    desc = re.sub(r'(?:\s*|^\s*)[Pp]riority\s*[:=]\s*[^\n]+', '', desc).strip()
+    # -----------------------------------------------------------------
+    
     attrs = req.get("attributes", {})
+    
+    # Initialize the main issue body with only the requirement ID for tracking
+    body = f"**Requirement ID:** `{req.get('id', '(No ID)')}`\n\n"
 
-    ignored = {"ID", "Id", "Title", "Description"}
-    other_attrs = {k: v for k, v in attrs.items() if k not in ignored}
+    # 2. Conditionally add the Description section
+    if show_description and config_attrs.get("Description", {}).get("include_in_body", True):
+        body += f"### 📝 Description\n{desc}\n\n"
 
-    body = f"""**Requirement ID:** `{req.get('id', '(No ID)')}`
+        
+    # 3. Build the Attributes list dynamically based on configuration
+    
+    # Map the core fields to their values for easy lookup
+    CORE_VALUES = {
+        "ID": req.get('id', '(No ID)'),
+        "Title": req.get('title', '(Untitled)')
+    }
+    
+    table_lines = ["### 📄 Attributes", "| Attribute | Value |", "|------------|--------|"]
 
-### 📝 Description
-{desc}
+    # Check and add primary fields (ID, Title) first if configured to show
+    if show_id and config_attrs.get("ID", {}).get("include_in_body", True):
+        table_lines.append(f"| ID | {CORE_VALUES['ID']} |")
+    if show_title and config_attrs.get("Title", {}).get("include_in_body", True):
+        table_lines.append(f"| Title | {CORE_VALUES['Title']} |")
 
-### 📄 Attributes
-| Attribute | Value |
-|------------|--------|
-| ID | {req.get('id', '(No ID)')} |
-| Title | {req.get('title', '(Untitled)')} |
-"""
 
-    for k, v in other_attrs.items():
-        body += f"| {k} | {v} |\n"
+    filtered_attrs = {}
+    for k, v in attrs.items():
+        attr_config = config_attrs.get(k, {})
+        if attr_config.get("include_in_body", True):
+            filtered_attrs[k] = v
+    # -------------------------------------------
+
+    # Build attributes table
+    for k, v in filtered_attrs.items():
+        if k in CORE_FIELDS:
+            continue
+        safe_v = str(v).replace("\n", " ").replace("|", "\\|")
+        table_lines.append(f"| {k} | {safe_v} |")    
+
+    # Only append the table if there is content beyond the headers
+    if len(table_lines) > 3: # 3 lines are the header, separator, and section title
+        body += "\n".join(table_lines)
+    else:
+        # If no attributes are configured to show, just add a note
+        body += "### 📄 Attributes\n(No attributes configured to display.)"
+
 
     return body.strip()
 
@@ -296,48 +461,117 @@ def format_req_body(req):
 # -------------------------
 def initialize_project_ids(repo_full_name, github_token):
     """
-    Dynamically finds Project and Field IDs using names.
+    Dynamically finds Project and Field IDs using GraphQL query
+    based on PROJECT_OWNER and PROJECT_TITLE environment variables.
     """
-    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABEL
 
-    # 1. Hardcoded Project ID (Must be the Node ID, PVT_...)
-    PROJECT_NODE_ID = "PVT_kwHOCWTIsM4BHvNr"
+    global PROJECT_NODE_ID, FIELD_ID_REQID, FIELD_ID_PRIORITY, FIELD_ID_LABEL, FIELD_ID_STATUS
 
-    # 2. Fetch all field metadata
-    fetch_project_metadata(PROJECT_NODE_ID, github_token)
+    owner = os.getenv("PROJECT_OWNER")
+    project_title = os.getenv("PROJECT_TITLE")
 
-    # 3. Lookup the Field IDs by name
+    if not owner or not project_title:
+        print("❌ Missing PROJECT_OWNER or PROJECT_TITLE environment variables.")
+        print("   Please set them in your workflow YAML:")
+        print("   PROJECT_OWNER: ${{ secrets.PROJECT_OWNER }}")
+        print("   PROJECT_TITLE: ${{ secrets.PROJECT_TITLE }}")
+        return
+
+    # -------------------------------------------------------------
+    # 1. Query GitHub to get the Project V2 Node ID dynamically
+    # -------------------------------------------------------------
+    query = """
+    query GetProjectID($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        projectsV2(first: 20) {
+          nodes {
+            id
+            title
+            url
+          }
+        }
+      }
+    }
+    """
+
+    repo_name = repo_full_name.split("/")[-1]   # Extract repo name only
+
+    variables = {
+        "owner": owner,
+        "repo": repo_name
+    }
+
+    print(f"🔎 Looking up Project ID for owner='{owner}', repo='{repo_name}', title='{project_title}'...")
+
+    response = github_graphql_request(github_token, query, variables)
+
+    try:
+        projects = (
+            response
+            .get("data", {})
+            .get("repository", {})
+            .get("projectsV2", {})
+            .get("nodes", [])
+        )
+    except:
+        projects = []
+
+    if not projects:
+        print("❌ No ProjectV2 boards found in the repository.")
+        return
+
+    # Find project by title (exact match)
+    matched = [p for p in projects if p.get("title") == project_title]
+
+    if not matched:
+        print(f"❌ Project titled '{project_title}' not found.")
+        print("📌 Available project titles:")
+        for p in projects:
+            print(f"   - {p.get('title')}")
+        return
+
+    PROJECT_NODE_ID = matched[0]["id"]
+    print(f"✅ Found Project Node ID: {PROJECT_NODE_ID}")
+
+    # -------------------------------------------------------------
+    # 2. Fetch all field metadata (same as before)
+    # -------------------------------------------------------------
+    try:
+        fetch_project_metadata(PROJECT_NODE_ID, github_token)
+    except Exception as e:
+        print(f"❌ Failed to fetch project metadata: {e}")
+        return
+
     FIELD_ID_REQID = FIELD_ID_MAP.get("System Requirement ID", {}).get("id")
     FIELD_ID_PRIORITY = FIELD_ID_MAP.get("Priority", {}).get("id")
     FIELD_ID_LABEL = FIELD_ID_MAP.get("Requirement Label", {}).get("id")
-
-
-    if not FIELD_ID_REQID:
-        print("❌ Field 'System Requirement ID' not found on the project.")
-    if not FIELD_ID_PRIORITY:
-        print("❌ Field 'Priority' not found on the project.")
-    if not FIELD_ID_LABEL:
-        print("❌ Field 'Requirement Label' not found on the project.")
+    FIELD_ID_STATUS = FIELD_ID_MAP.get("Status", {}).get("id")
 
     print("✅ Initialized project configuration using dynamic lookup.")
-    print(f"   Project ID: {PROJECT_NODE_ID}")
-    print(f"   System Requirement Field ID: {FIELD_ID_REQID}")
-    print(f"   Priority Field ID: {FIELD_ID_PRIORITY}")
-    print(f"   Requirement Label Field ID: {FIELD_ID_LABEL}")
+    print(f"  Project ID: {PROJECT_NODE_ID}")
+    print(f"  System Requirement Field ID: {FIELD_ID_REQID}")
+    print(f"  Priority Field ID: {FIELD_ID_PRIORITY}")
+    print(f"  Requirement Label Field ID: {FIELD_ID_LABEL}")
+    print(f"  Status Field ID: {FIELD_ID_STATUS}")
 
     
-
-# 🎯 FIX: Updated to handle Priority as a Single Select field using the dynamic map, AND automatically adds missing items.
 def set_issue_project_fields(req, issue_node_id, github_token):
     """
     Assigns Project V2 fields by first resolving the Issue ID (I_...) to the 
     required Project V2 Item ID (PVTI_...), adding the item if it's missing.
     """
+    config = load_config()
+    config_attrs = config.get("attributes", {})
+
+    global IS_DRY_RUN
+    if IS_DRY_RUN:
+        print(f"⏩ SKIPPED: Project field update for {req.get('id', 'Unknown Req')} skipped (Dry Run Mode).")
+        return
     
     # Use the Issue Node ID to find the Project V2 Item ID (PVTI_...)
     project_item_id = get_project_item_id(issue_node_id, PROJECT_NODE_ID, github_token)
     
-    # 🆕 FIX: If Item ID is missing for an existing issue, add it to the project and retry lookup.
+    # FIX: If Item ID is missing for an existing issue, add it to the project and retry lookup.
     if not project_item_id:
         print(f"🔎 Existing Issue for {req.get('id', 'Unknown Req')} is not a Project V2 item. Attempting to add...")
         
@@ -373,7 +607,6 @@ def set_issue_project_fields(req, issue_node_id, github_token):
     # -----------------------------------------------------------------
     # Step 3: Set "Requirement Label" (Single Select = 'System Requirement')
     # -----------------------------------------------------------------
-    # We must look up the Option ID for 'System Requirement' dynamically
     req_label_data = FIELD_ID_MAP.get("Requirement Label", {})
     option_id_label = req_label_data.get("options", {}).get("System Requirement")
     
@@ -394,31 +627,64 @@ def set_issue_project_fields(req, issue_node_id, github_token):
         })
         print("-> Set 'Requirement Label' to: System Requirement")
 
+
+    
     # -----------------------------------------------------------------
-    # Step 4: Set "Priority" (Single Select Field) - WITH MAPPING
+    # Step 4: Set "Priority" (Single Select Field) - Controlled by config
     # -----------------------------------------------------------------
+
+    priority_config = config["attributes"].get("Priority", {})
     priority_text = (req.get("attributes") or {}).get("Priority") or (req.get("attributes") or {}).get("PRIORITY")
 
-    # 🆕 Priority Mapping for robustness against data entry errors 
-    # Map the value from ReqIF (key) to the exact option name in GitHub (value).
-    PRIORITY_MAPPING = {
-        "High": "High", 
-        "Medium": "Medium",
-        "Mid": "Medium",     # Map alternative terms to the official option
-        "Low": "Low",
-        "medium": "Medium",  # Handle lower-case input
-    }
-    
-    # Use the mapping. If no mapping is found, use the original text as a fallback.
-    mapped_priority_text = PRIORITY_MAPPING.get(priority_text, priority_text)
+    # If config says include_in_body=false → DO NOT set project Priority
+    if not priority_config.get("include_in_body", True):
+        print("-> Skipping Priority (config: include_in_body=false)")
+        priority_text = None   # Prevent any further processing
 
-    priority_data = FIELD_ID_MAP.get("Priority", {})
-    # Use the mapped text for option lookup
-    option_id_priority = priority_data.get("options", {}).get(mapped_priority_text) 
+    if priority_text:
+        PRIORITY_MAPPING = {
+            "High": "P0", 
+            "Medium": "P1",
+            "Low": "P2",
+            "high": "P0", 
+            "medium": "P1",
+            "low": "P2",
+        }
+
+        mapped_priority_text = PRIORITY_MAPPING.get(priority_text, priority_text)
+        priority_data = FIELD_ID_MAP.get("Priority", {})
+        option_id_priority = priority_data.get("options", {}).get(mapped_priority_text)
+
+        if FIELD_ID_PRIORITY and mapped_priority_text and option_id_priority:
+            query_set_priority = """
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+            updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                value: { singleSelectOptionId: $optionId }
+            }) { projectV2Item { id } }
+            }
+            """
+            github_graphql_request(github_token, query_set_priority, {
+                "projectId": PROJECT_NODE_ID,
+                "itemId": project_item_id,
+                "fieldId": FIELD_ID_PRIORITY,
+                "optionId": option_id_priority
+            })
+            print(f"-> Set 'Priority' (Single Select) to: {mapped_priority_text}")
+        elif FIELD_ID_PRIORITY and mapped_priority_text:
+            print(f"⚠️ Priority '{mapped_priority_text}' (mapped from '{priority_text}') not found as a selectable option in the project.")
+
+
+    # -----------------------------------------------------------------
+    # 🆕 Step 5: Set "Status" (Single Select = 'Backlog')
+    # -----------------------------------------------------------------
+    status_text = "Backlog" 
+
+    status_data = FIELD_ID_MAP.get("Status", {})
+    option_id_status = status_data.get("options", {}).get(status_text) 
     
-    if FIELD_ID_PRIORITY and mapped_priority_text and option_id_priority:
-        # Use the same Single Select mutation as for the label
-        query_set_priority = """
+    if FIELD_ID_STATUS and option_id_status:
+        query_set_status = """
         mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
           updateProjectV2ItemFieldValue(input: {
             projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
@@ -426,22 +692,22 @@ def set_issue_project_fields(req, issue_node_id, github_token):
           }) { projectV2Item { id } }
         }
         """
-        github_graphql_request(github_token, query_set_priority, {
+        github_graphql_request(github_token, query_set_status, {
             "projectId": PROJECT_NODE_ID,
             "itemId": project_item_id,
-            "fieldId": FIELD_ID_PRIORITY,
-            "optionId": option_id_priority
+            "fieldId": FIELD_ID_STATUS,
+            "optionId": option_id_status
         })
-        print(f"-> Set 'Priority' (Single Select) to: {mapped_priority_text}")
-    elif FIELD_ID_PRIORITY and mapped_priority_text:
-        print(f"⚠️ Priority '{mapped_priority_text}' (mapped from '{priority_text}') not found as a selectable option in the project. Please ensure the option exists in GitHub.")
+        print(f"-> Set 'Status' (Single Select) to: {status_text}")
+    elif FIELD_ID_STATUS:
+        print(f"⚠️ Status '{status_text}' not found as a selectable option in the project. Please ensure the option exists in GitHub.")
 
 
 # -------------------------
-# GitHub issue management (UPDATED URLS AND LABELS)
+# GitHub issue management
 # -------------------------
 def get_existing_issues(repo, token):
-    # 🟢 Filter issues using ONLY the 'System Requirement' label. This must be the label used for all managed issues.
+    # Filter issues using ONLY the 'System Requirement' label.
     url = f"{GITHUB_API_URL}/repos/{repo}/issues?state=all&labels=System Requirement&per_page=100"
     issues = []
     while url:
@@ -453,6 +719,12 @@ def get_existing_issues(repo, token):
 
 
 def create_issue(repo, token, req):
+    global IS_DRY_RUN
+    if IS_DRY_RUN:
+        print(f"⏩ SKIPPED: Issue creation for {req['id']} skipped (Dry Run Mode).")
+        # Return a mock object with node_id to allow subsequent logic (like set_issue_project_fields) to run in dry-run simulation
+        return {'node_id': f"I_mock_{req['id']}", 'number': 'MOCK'}
+
     # Ensure all newly created issues use the expected format: [ID] Title
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
@@ -471,22 +743,34 @@ def create_issue(repo, token, req):
 
 
 def update_issue(repo, token, issue_number, req):
+    global IS_DRY_RUN
+    if IS_DRY_RUN:
+        print(f"⏩ SKIPPED: Issue #{issue_number} ({req['id']}) update skipped (Dry Run Mode).")
+        return None # Return None to simulate no update occurred
+
     # Enforce the proper title format and single label on all updates
     data = {
         "title": f"[{req['id']}] {choose_title(req)}",
         "body": format_req_body(req),
         "state": "open",
+        # 🟢 CRITICAL: This line forces the label to be ONLY "System Requirement"
         "labels": ["System Requirement"], 
     }
     resp = requests.patch(f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}", headers=github_headers(token), json=data)
     if resp.status_code >= 300:
         print(f"❌ Failed to update issue #{issue_number}: {resp.text}")
+        return None
     else:
         print(f"♻️ Updated issue #{issue_number} ({req['id']}) - Content and single label enforced.")
     return resp.json()
 
 
 def close_issue(repo, token, issue_number, req_id):
+    global IS_DRY_RUN
+    if IS_DRY_RUN:
+        print(f"⏩ SKIPPED: Closing issue #{issue_number} ({req_id}) skipped (Dry Run Mode).")
+        return
+
     url = f"{GITHUB_API_URL}/repos/{repo}/issues/{issue_number}"
     
     data = {
@@ -503,80 +787,91 @@ def close_issue(repo, token, issue_number, req_id):
 
 
 # -------------------------
-# Main synchronization (Modified Issue Mapping)
+# Main synchronization (FIXED Issue Mapping & Update Logic)
 # -------------------------
 def sync_reqif_to_github():
+    global IS_DRY_RUN
+    
+    # 1. Set the Dry Run Mode based on environment variable
+    IS_DRY_RUN = os.getenv("REQIF_DRY_RUN", "False").lower() in ('true', '1', 't')
+
     github_token = os.getenv("GITHUB_TOKEN")
     repo_full_name = os.getenv("GITHUB_REPOSITORY")
+
     if not github_token or not repo_full_name:
-        print("❌ Missing GITHUB_TOKEN or GITHUB_REPOSITORY.")
-        sys.exit(1)
+        if IS_DRY_RUN:
+            print("📢 Running in DRY RUN MODE. GITHUB_TOKEN or GITHUB_REPOSITORY are missing, but execution will continue...")
+        else:
+            print("❌ Missing GITHUB_TOKEN or GITHUB_REPOSITORY. Cannot run without them in production mode.")
+            sys.exit(1)
 
     # --- Initialize Project IDs ---
     try:
+        # NOTE: initialize_project_ids needs GITHUB_TOKEN to run even in dry run mode
         initialize_project_ids(repo_full_name, github_token)
     except Exception as e:
         print(f"❌ Project initialization failed: {e}")
 
     try:
-        reqs = parse_reqif_requirements()
+        # This function now also performs schema detection and saves reqif_config.json
+        reqs = parse_reqif_requirements() 
         issues = get_existing_issues(repo_full_name, github_token) 
 
-        # Map existing issues by ReqIF ID
+        # Map existing issues by ReqIF ID (Flexible mapping added previously)
         issue_map = {}
         for issue in issues:
             title = issue.get("title", "")
             req_id = None
             
-            # 1. Try format: [ID] Title (The script's intended format)
+            # 1. Try format: [ID] Title
             if title.startswith("[") and "]" in title:
                 req_id = title.split("]")[0][1:].strip()
             
-            # 2. 🟢 NEW: Try format: ID: Title (To catch issues like "_SO_1: ...")
+            # 2. Try format: ID: Title 
             elif ":" in title:
-                # Get everything before the first colon and strip whitespace
                 temp_id = title.split(":")[0].strip()
-                # Simple check to ensure we didn't accidentally grab a full sentence
                 if 0 < len(temp_id.split()) <= 3: 
                     req_id = temp_id
 
             if req_id:
                 issue_map[req_id] = issue
             else:
-                # Only warn if the issue has the required label but doesn't match a format
                 print(f"⚠️ Warning: Issue #{issue.get('number')} with title '{title}' skipped. Title does not match a recognizable ID format ([ID] Title or ID: Title).")
 
 
         # Create or update issues
         for req_id, req in reqs.items():
-            if req_id in issue_map:
-                issue = issue_map[req_id]
-
-                # UNCONDITIONALLY update the issue if found in ReqIF.
-                update_issue(repo_full_name, github_token, issue["number"], req)
-                
-                # Set Project Fields for existing issue
-                if PROJECT_NODE_ID and issue.get('node_id'):
-                    set_issue_project_fields(req, issue['node_id'], github_token)
+            issue = issue_map.get(req_id)
+            issue_node_id = None
+            
+            if issue:
+                # 🟢 UNCONDITIONALLY update the issue if found in ReqIF (check inside function).
+                updated_issue = update_issue(repo_full_name, github_token, issue["number"], req)
+                # Use the original issue's node_id for project fields if no actual update occurred in dry run
+                issue_node_id = issue.get('node_id')
 
             else:
-                # Issue creation returns full JSON object
+                # Issue creation returns full JSON object (check inside function).
                 new_issue_json = create_issue(repo_full_name, github_token, req)
+                if new_issue_json:
+                    issue_node_id = new_issue_json.get('node_id')
+            
+            # Set Project Fields for new or existing issue 
+            if PROJECT_NODE_ID and issue_node_id:
+                # set_issue_project_fields now contains the IS_DRY_RUN check
+                set_issue_project_fields(req, issue_node_id, github_token)
 
-                # Set Project Fields for new issue 
-                if PROJECT_NODE_ID and new_issue_json and new_issue_json.get('node_id'):
-                    set_issue_project_fields(req, new_issue_json['node_id'], github_token)
 
         # Close removed issues
         for req_id, issue in issue_map.items():
             if req_id not in reqs:
+                # close_issue now contains the IS_DRY_RUN check
                 close_issue(repo_full_name, github_token, issue["number"], req_id)
 
         print("✅ Synchronization complete.")
     except Exception:
         print("❌ Unexpected error during synchronization.")
         traceback.print_exc()
-
 
 if __name__ == "__main__":
     sync_reqif_to_github()
