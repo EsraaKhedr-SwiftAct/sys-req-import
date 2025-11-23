@@ -1,14 +1,12 @@
 name: Import ReqIF
 
 on:
-  # NEW: Automatically run the workflow when files change
+  # Trigger workflow automatically when the config changes
   push:
     paths:
-      # NEW TRIGGER: Trigger on changes to the configuration file
       - 'reqif_config.json'
-
       
-  # Existing: Keep the manual trigger functionality
+  # Manual trigger
   workflow_dispatch:
     inputs:
       reqif-file:
@@ -41,15 +39,22 @@ jobs:
 
       - name: Run ReqIF import (with Secret Trimming)
         env:
-          # Pass GITHUB_TOKEN directly as it is usually clean
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          # Use shell commands to safely trim leading/trailing whitespace and newlines from secrets
-          # This fixes the 'Could not resolve to a Repository' GraphQL error
-          PROJECT_OWNER=$(echo "${{ secrets.PROJECT_OWNER }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//')
-          PROJECT_TITLE=$(echo "${{ secrets.PROJECT_TITLE }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//')
+          # --- Clean PROJECT_OWNER and PROJECT_TITLE secrets ---
+          PROJECT_OWNER=$(echo "${{ secrets.PROJECT_OWNER }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          PROJECT_TITLE=$(echo "${{ secrets.PROJECT_TITLE }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+          # --- Clean GITHUB_REPOSITORY environment variable ---
+          REPO_FULL_NAME=$(echo "$GITHUB_REPOSITORY" | tr -d '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           echo "Running script for project: $PROJECT_OWNER/$PROJECT_TITLE"
-          
-          # Execute the Python script, passing the now-clean variables
+          echo "Repository: $REPO_FULL_NAME"
+
+          # Export cleaned variables so Python script can read them
+          export PROJECT_OWNER
+          export PROJECT_TITLE
+          export GITHUB_REPOSITORY=$REPO_FULL_NAME
+
+          # Execute the Python script
           python .github/scripts/import_reqif_dynamic.py
