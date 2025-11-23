@@ -1,14 +1,14 @@
 {
     "attributes": {
-        "Description": {
-            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
-            "include_in_body": true
-        },
         "ID": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },
-        "Priority": {
+        "Status": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": false
+        },
+        "Text": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },

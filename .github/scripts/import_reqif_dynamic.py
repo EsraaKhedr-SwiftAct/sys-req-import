@@ -13,8 +13,11 @@ import re # <-- ADDED: Necessary for regular expression cleaning
 # NOTE: This script assumes 'reqif_parser_full' is available in the Python environment path.
 from reqif_parser_full import ReqIFParser 
 
-# --- CONFIGURATION FILE GLOBALS ---
-CONFIG_FILE = os.path.join(os.getcwd(), "reqif_config.json")
+# Always save config file in repository root, not script folder
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+CONFIG_FILE = os.path.join(REPO_ROOT, "reqif_config.json")
+
 
 
 def load_config():
@@ -77,11 +80,11 @@ def perform_schema_detection(reqif_attrs):
         config_keys.discard(key)
 
     # Optional: handle attributes in config that are no longer present in ReqIF
-    for attr_name in config_keys:
-        if "description" in config_attrs[attr_name]:  # avoid removing manually added attrs
-            # Example: mark as missing
-            # config_attrs[attr_name]["missing"] = True
-            pass
+# Remove attributes from config that are no longer in the ReqIF
+    for attr_name in list(config_keys):  # iterate over a copy
+        print(f"🗑️ Removing obsolete attribute from config: '{attr_name}'")
+        config_attrs.pop(attr_name, None)
+
 
     # ALWAYS save config after normalization
     if IS_DRY_RUN and (new_attr_found or normalized_config):
