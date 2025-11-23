@@ -39,10 +39,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run ReqIF import
+      - name: Run ReqIF import (with Secret Trimming)
         env:
+          # Pass GITHUB_TOKEN directly as it is usually clean
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-          PROJECT_TITLE: ${{ secrets.PROJECT_TITLE }}
-          PROJECT_OWNER: ${{ secrets.PROJECT_OWNER }}
         run: |
+          # Use shell commands to safely trim leading/trailing whitespace and newlines from secrets
+          # This fixes the 'Could not resolve to a Repository' GraphQL error
+          PROJECT_OWNER=$(echo "${{ secrets.PROJECT_OWNER }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//')
+          PROJECT_TITLE=$(echo "${{ secrets.PROJECT_TITLE }}" | tr -d '\n' | sed -e 's/^[[:space:]]*//')
+
+          echo "Running script for project: $PROJECT_OWNER/$PROJECT_TITLE"
+          
+          # Execute the Python script, passing the now-clean variables
           python .github/scripts/import_reqif_dynamic.py
