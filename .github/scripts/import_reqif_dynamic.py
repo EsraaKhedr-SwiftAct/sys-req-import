@@ -410,7 +410,7 @@ def format_req_body(req):
     body = f"**Requirement ID:** `{req.get('id', '(No ID)')}`\n\n"
 
     # 2. Conditionally add the Description section
-    if show_description and config_attrs.get("Description", {}).get("include_in_body", True):
+    if show_description :#and config_attrs.get("Description", {}).get("include_in_body", True)
         body += f"### 📝 Description\n{desc}\n\n"
 
         
@@ -425,9 +425,9 @@ def format_req_body(req):
     table_lines = ["### 📄 Attributes", "| Attribute | Value |", "|------------|--------|"]
 
     # Check and add primary fields (ID, Title) first if configured to show
-    if show_id and config_attrs.get("ID", {}).get("include_in_body", True):
+    if show_id : #and config_attrs.get("ID", {}).get("include_in_body", True)
         table_lines.append(f"| ID | {CORE_VALUES['ID']} |")
-    if show_title and config_attrs.get("Title", {}).get("include_in_body", True):
+    if show_title : #and config_attrs.get("Title", {}).get("include_in_body", True)
         table_lines.append(f"| Title | {CORE_VALUES['Title']} |")
 
 
