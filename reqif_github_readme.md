@@ -50,7 +50,7 @@ Clone this repo [Repolink](https://github.com/EsraaKhedr-SwiftAct/sys-req-import
 
 ### 3. create new github project, Make your project as a copy of this project [ProjectLink](https://github.com/users/EsraaKhedr-SwiftAct/projects/5) .
 
-### 4. Link the project to your github repo using **Project Settings → Default repository**.
+### 4. Link the project to your github repo via **Project Settings → Default repository**.
 
 ### 5. Add Required GitHub Secrets to the Repo.
 Note: this can be done only by the owner of the repo.
