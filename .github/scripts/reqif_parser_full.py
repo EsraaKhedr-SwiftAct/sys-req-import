@@ -20,7 +20,6 @@ import re
 
 # -----------------------
 # Helper utilities
-# -----------------------
 def _load_reqif_or_reqifz(path: str) -> str:
     """If path is .reqifz, extract and return internal .reqif path, otherwise return path."""
     if not path:
@@ -111,8 +110,8 @@ def clean_xhtml_to_text(elem):
     txt = "".join(parts)
     # Replace any sequences of whitespace with single spaces except newlines; collapse multiple newlines
     # Normalize whitespace but keep line breaks:
-    #  - convert sequences of spaces/tabs to single space
-    #  - collapse 3+ newlines to 2
+    #  - convert sequences of spaces/tabs to single space
+    #  - collapse 3+ newlines to 2
     txt = re.sub(r'[ \t\f\v]+', ' ', txt)
     txt = re.sub(r'\r\n?', '\n', txt)
     txt = re.sub(r'\n\s*\n\s*\n+', '\n\n', txt) # keep up to double newline
@@ -124,7 +123,6 @@ def clean_xhtml_to_text(elem):
 
 # -----------------------
 # Core classes
-# -----------------------
 class ReqIFRequirement:
     def __init__(self, identifier, title="", description="", attributes=None):
         self.id = identifier
@@ -170,7 +168,7 @@ class ReqIFParser:
 
         # Hierarchy and relations containers (populated in parse)
         # FIX: Central storage for unique, complete requirements
-        self.object_map: Dict[str, ReqIFRequirement] = {} 
+        self.object_map: Dict[str, ReqIFRequirement] = {}
         self.hierarchy_map = {} # object_id -> [child_object_ids]
         self.parent_map = {} # object_id -> parent_object_id
         self.relations: List[Dict[str, Any]] = []
@@ -180,7 +178,7 @@ class ReqIFParser:
 
         print(f"✅ Definition map built ({len(self.def_map)} items):")
         for k, v in self.def_map.items():
-            print(f"   - {k} → {v}")
+            print(f"   - {k} → {v}")
         print(f"✅ Enumeration map built ({len(self.enum_map)} items).")
         # ----------------------------------
 
@@ -325,7 +323,7 @@ class ReqIFParser:
         print(f"✅ Enumeration map updated (supports DOORS Next): {len(enum_mapping)} items")
         return enum_mapping
 
-        # ------------------------------------------------------------
+    # ------------------------------------------------------------
     # Build SPEC-OBJECT-TYPE → attribute-definition mapping
     # (Used by Polarion, Jama, DOORS Next)
     # ------------------------------------------------------------
@@ -506,10 +504,68 @@ class ReqIFParser:
             # --- Collect attributes ---
             attributes = self._collect_attributes(spec_obj)
 
+            # -------------------------
+            # UNIVERSAL REQUIREMENT TYPE EXTRACTION (NON-INTRUSIVE)
+            # This block extracts 'Type' from multiple vendor patterns:
+            #  - SPEC-OBJECT attribute TYPE / type
+            #  - nested <TYPE> / <SPEC-OBJECT-TYPE-REF> content
+            #  - fallback: attributes that include 'type' in their name
+            # It attempts to resolve GUID/ID via self.def_map to a readable long name.
+            # -------------------------
+            req_type = None
+
+            # 1) SPEC-OBJECT attribute (common in DOORS/DOORS Next)
+            req_type = spec_obj.get("TYPE") or spec_obj.get("type")
+
+            # 2) Nested <TYPE> element (Polarion / some exports)
+            if not req_type:
+                type_elem = self._find(spec_obj, "TYPE") or find_first_child_local(spec_obj, "TYPE")
+                if type_elem is not None:
+                    # Prefer direct text if present
+                    if (type_elem.text or "").strip():
+                        req_type = type_elem.text.strip()
+                    else:
+                        # Look for nested refs (SPEC-OBJECT-TYPE-REF, TYPE-REF, or similar)
+                        ref = self._find(type_elem, "SPEC-OBJECT-TYPE-REF") or self._find(type_elem, "TYPE-REF")
+                        if ref is None:
+                            ref = find_first_child_local(type_elem, "SPEC-OBJECT-TYPE-REF") or find_first_child_local(type_elem, "TYPE-REF")
+                        if ref is not None:
+                            txt = text_of(ref)
+                            if txt:
+                                req_type = txt
+
+            # 3) If req_type is a definition ID (GUID or def identifier), resolve to long-name
+            if req_type and req_type in self.def_map:
+                req_type = self.def_map.get(req_type)
+
+            # 4) Extreme fallback: look inside collected attributes for keys containing 'type'
+            if not req_type:
+                for k, v in attributes.items():
+                    if isinstance(k, str) and "type" in k.lower() and v:
+                        req_type = v
+                        break
+
+            # 5) If found — normalize and add to attributes (do not overwrite existing 'Type' if present)
+            if req_type:
+                # normalize whitespace and string content if needed
+                if isinstance(req_type, str):
+                    req_type = req_type.strip()
+                if "Type" not in attributes:
+                    attributes["Type"] = req_type
+                    print(f"   → Extracted Type: {req_type}")
+                else:
+                    # If attribute exists with a different representation, keep existing attribute but log both
+                    if attributes.get("Type") != req_type:
+                        # keep user's existing 'Type' but add a normalized alias
+                        attributes.setdefault("Type (resolved)", req_type)
+                        print(f"   → Extracted Type (resolved): {req_type} (existing Type preserved)")
+
+            # -------------------------
+
             # attach hierarchy info if found
             children = self.hierarchy_map.get(identifier, [])
             if children:
-                print(f"   → Has children: {children}")
+                print(f"   → Has children: {children}")
                 attributes["__children__"] = children
             parent = self.parent_map.get(identifier)
             if parent:
@@ -530,16 +586,16 @@ class ReqIFParser:
             if self.extract_attachments and identifier in self.attachments:
                 attributes["__attachments__"] = self.attachments.get(identifier)
 
-            print(f"   Attributes found: {list(attributes.keys())}")
+            print(f"   Attributes found: {list(attributes.keys())}")
 
             title = self._find_flexible(attributes, ["Title", "Name", "Req Title", "Requirement"])
             description = self._find_flexible(attributes, ["Description", "Desc", "Text", "Body", "Content"])
             # Auto-generate title from description if missing
             if not title and description:
                 title = self._auto_title_from_description(description)
-                print(f"   → Auto-generated Title from Description: {title!r}")
-            print(f"   → Detected Title: {title!r}")
-            print(f"   → Detected Description: {description!r}")
+                print(f"   → Auto-generated Title from Description: {title!r}")
+            print(f"   → Detected Title: {title!r}")
+            print(f"   → Detected Description: {description!r}")
             
             current_req = ReqIFRequirement(identifier, title, description, attributes)
 
@@ -554,10 +610,10 @@ class ReqIFParser:
 
                 if is_more_complete:
                     self.object_map[identifier] = current_req
-                    print(f"   → UPDATED {identifier} in map (more attributes/data found).")
+                    print(f"   → UPDATED {identifier} in map (more attributes/data found).")
                 else:
                     # Logic to SKIPPED, ensuring the more complete version (which should already be in the map) is kept.
-                    print(f"   → SKIPPED update for {identifier} (existing is more complete).")
+                    print(f"   → SKIPPED update for {identifier} (existing is more complete).")
                     
             else:
                 self.object_map[identifier] = current_req
@@ -615,7 +671,7 @@ class ReqIFParser:
                     found = list(iter_elements_by_local_name(values_block, tag))
                 all_attrs += found
 
-        print(f"   → Found {len(all_attrs)} clean ATTRIBUTE-VALUE elements")
+        print(f"   → Found {len(all_attrs)} clean ATTRIBUTE-VALUE elements")
 
         for attr in all_attrs:
             # Acquire attribute definition identifier by several vendor patterns
@@ -687,7 +743,7 @@ class ReqIFParser:
                         for cand in candidate_defs:
                             if cand in self.def_map:
                                 inferred_name = self.def_map.get(cand) or cand
-                                print(f"      🔄 Inferred missing attribute definition: {inferred_name} (from type {obj_type})")
+                                print(f"      🔄 Inferred missing attribute definition: {inferred_name} (from type {obj_type})")
                                 ref_id = cand
                                 attr_name = inferred_name
                                 value = self._extract_value(attr)
@@ -907,7 +963,6 @@ class ReqIFParser:
         return value
 
     # --- UPDATED METHOD: Correctly extracts all value types (FIXED) ---
-    # --- UPDATED METHOD: Correctly extracts all value types (FIXED) ---
     def _extract_value(self, attr):
         
         tag = local_tag(attr)
@@ -1008,6 +1063,7 @@ if __name__ == "__main__":
     parser = ReqIFParser("sample.reqif", extract_attachments=False)
     requirements = parser.parse()
     parser.pretty_print_requirements(requirements)
+
 
 
 
