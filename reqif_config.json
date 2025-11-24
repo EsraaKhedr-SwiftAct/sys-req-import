@@ -4,10 +4,6 @@
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },
-        "__REQ_TYPE__": {
-            "description": "Intrinsic ReqIF Type (Spec Object Type). Set 'include_in_body' to false to hide it in the issue body.",
-            "include_in_body": true
-        },
         "__children__": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
