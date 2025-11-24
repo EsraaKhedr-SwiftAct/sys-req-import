@@ -60,8 +60,7 @@ def perform_schema_detection(reqif_attrs):
     # Detect new normalized attributes
     for attr_name in sorted(reqif_attrs):
         key = str(attr_name).strip()  # normalized key
-        if key in ("ID", "Title", "Description", "Text"):
-            continue
+
         # ✅ Skip __parent__ and __children__ if they are not in this ReqIF
         if key in ("__parent__", "__children__") and key not in reqif_attrs:
             continue
@@ -119,33 +118,10 @@ def parse_reqif_requirements():
 
         # Convert object attributes
         attributes = getattr(req, "attributes", {}) or {}
-        # Normalize ID, Title, Description/Text from attributes
-        req_id = getattr(req, "identifier", None) \
-                or attributes.get("ID") \
-                or f"REQ-{i+1}"
 
-        title = getattr(req, "title", None) \
-                or attributes.get("Title") \
-                or req_id
-
-        # ⚡ Normalize Description/Text
-        description = getattr(req, "description", None) \
-                    or attributes.get("Description") \
-                    or attributes.get("Text") \
-                    or "(No description found)"
-
-        # Cleanup formatting
-        req_id = str(req_id).strip()
-        title = str(title).strip()
-        description = str(description).strip()
-
-        title = html.unescape(title)
-        description = html.unescape(description)
-
-        # Replace non-breaking spaces
-        title = title.replace('\xa0', ' ')
-        description = description.replace('\xa0', ' ')
-
+        req_id = getattr(req, "identifier", None) or attributes.get("ID") or f"REQ-{i+1}"
+        title = getattr(req, "title", None) or attributes.get("Title") or req_id
+        description = getattr(req, "description", None) or attributes.get("Description") or "(No description found)"
 
         # Cleanup formatting
         req_id = req_id.strip() if req_id else f"REQ-{i+1}"
@@ -404,93 +380,96 @@ def choose_title(req):
 # Improved formatting (full attribute table using config)
 # -------------------------
 def format_req_body(req):
+    
     config = load_config() 
     config_attrs = config.get("attributes", {})
-
-    # DEBUG
+    # DEBUG: Print all attributes and config
     print("DEBUG RAW ATTR KEYS:", repr(list(req.get("attributes", {}).keys())))
     print("DEBUG RAW CONFIG KEYS:", repr(list(config_attrs.keys())))
+
     print(f"DEBUG: All attributes for {req.get('id')}: {list(req.get('attributes', {}).keys())}")
     print(f"DEBUG: Config attributes: {list(config_attrs.keys())}")
     if 'Priority' in req.get('attributes', {}):
         priority_config = config_attrs.get('Priority', {})
         print(f"DEBUG: Priority attribute found, config: {priority_config}")
         print(f"DEBUG: Priority value: {req.get('attributes', {}).get('Priority')}")    
-
-    # Core fields
-    CORE_FIELDS = {"ID", "Title", "Description", "Text"}
-
-    show_description = True # config_attrs.get("Description", {}).get("include_in_body", True)
-    show_text = True #config_attrs.get("Text", {}).get("include_in_body", True)
-    show_id = True #config_attrs.get("ID", {}).get("include_in_body", True)
-    show_title = True #config_attrs.get("Title", {}).get("include_in_body", True)
-
+   
+    # Define core fields and internal fields that might appear in the attributes dictionary
+    # and whose display is controlled by the config.
+    CORE_FIELDS = {"ID", "Title", "Description"}
+    
+    # 1. Check config for the core fields
+    # Defaulting to True for backward compatibility if the attribute is missing from config
+    show_description = config_attrs.get("Description", {}).get("include_in_body", True)
+    show_id = config_attrs.get("ID", {}).get("include_in_body", True)
+    show_title = config_attrs.get("Title", {}).get("include_in_body", True)
+ 
+     # NEW → global description flag
     include_description = config.get("include_description", True)
-
-
-    # Case-insensitive detection of description fields
-    desc_key = None
-    attrs_lower = {k.lower(): k for k in req.get("attributes", {}).keys()}
-
-    for candidate in ("description", "text"):
-        if candidate in attrs_lower:
-            desc_key = attrs_lower[candidate]   # original key
-            break
-
-    desc = req.get("attributes", {}).get(desc_key, "(No description found)").strip() if desc_key else "(No description found)"
-
-    # Clean embedded Priority mentions
+    desc = req.get("description", "(No description found)").strip()
+    
+    # --- FIX: Clean description of Priority mentions before display ---
+    # This prevents 'Priority: High' from showing up if it was embedded in the raw ReqIF description
+    # This regex removes patterns like "Priority: High", "priority=medium", etc., usually found on a single line.
     desc = re.sub(r'(?:\s*|^\s*)[Pp]riority\s*[:=]\s*[^\n]+', '', desc).strip()
-
+    # -----------------------------------------------------------------
+    
     attrs = req.get("attributes", {})
-
-    # --- Build body ---
+    
+    # Initialize the main issue body with only the requirement ID for tracking
     body = f"**Requirement ID:** `{req.get('id', '(No ID)')}`\n\n"
-    # Only show the description section if the specific attribute (Description or Text)
-    # is enabled in the config AND include_description is true.
-    if include_description and (
-        (desc_key and desc_key.lower() == "description" and show_description) or
-        (desc_key and desc_key.lower() == "text" and show_text)
-    ):
+
+    # 2. Conditionally add the Description section
+    if include_description and show_description :#and config_attrs.get("Description", {}).get("include_in_body", True)
         body += f"### 📝 Description\n{desc}\n\n"
 
-
-    # Core values for table
+        
+    # 3. Build the Attributes list dynamically based on configuration
+    
+    # Map the core fields to their values for easy lookup
     CORE_VALUES = {
         "ID": req.get('id', '(No ID)'),
         "Title": req.get('title', '(Untitled)')
     }
-
+    
     table_lines = ["### 📄 Attributes", "| Attribute | Value |", "|------------|--------|"]
 
-    if show_id:
+    # Check and add primary fields (ID, Title) first if configured to show
+    if show_id : #and config_attrs.get("ID", {}).get("include_in_body", True)
         table_lines.append(f"| ID | {CORE_VALUES['ID']} |")
-    if show_title:
+    if show_title : #and config_attrs.get("Title", {}).get("include_in_body", True)
         table_lines.append(f"| Title | {CORE_VALUES['Title']} |")
+
 
     filtered_attrs = {}
     for k, v in attrs.items():
-        if k in {"ID", "Title", "Description", "Text"}:
-            continue
         attr_config = config_attrs.get(k, {})
         if attr_config.get("include_in_body", True):
             filtered_attrs[k] = v
+    # -------------------------------------------
 
+    # Build attributes table
     for k, v in filtered_attrs.items():
-        # Skip core fields and description/text
-        if k in CORE_FIELDS or k.lower() in ("description", "text"):
+        # Skip core fields completely
+        if k in CORE_FIELDS:
             continue
+
+        # EXTRA FIX: Ensure Description never appears again in the attributes table
+        if k.lower() == "description":
+            continue
+
         safe_v = str(v).replace("\n", " ").replace("|", "\\|")
         table_lines.append(f"| {k} | {safe_v} |")
 
-    if len(table_lines) > 3:
+    # Only append the table if there is content beyond the headers
+    if len(table_lines) > 3:  # header + separator + section title
         body += "\n".join(table_lines)
     else:
         body += "### 📄 Attributes\n(No attributes configured to display.)"
 
+
+
     return body.strip()
-
-
 
 
 # -------------------------
