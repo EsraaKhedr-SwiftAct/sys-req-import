@@ -356,6 +356,11 @@ class ReqIFParser:
             type_id = t.get("IDENTIFIER") or t.get("ID")
             if not type_id:
                 continue
+            # Store type long-names also in def_map so TYPE_PolarionReq → PolarionRequirementType
+            long_name = t.get("LONG-NAME") or t.get("DESC")
+            if type_id and long_name:
+                self.def_map[type_id] = long_name
+
 
             attr_defs = []
 
@@ -516,6 +521,9 @@ class ReqIFParser:
 
             # 1) SPEC-OBJECT attribute (common in DOORS/DOORS Next)
             req_type = spec_obj.get("TYPE") or spec_obj.get("type")
+            if req_type in self.def_map:
+                req_type = self.def_map[req_type]
+
 
             # 2) Nested <TYPE> element (Polarion / some exports)
             if not req_type:
