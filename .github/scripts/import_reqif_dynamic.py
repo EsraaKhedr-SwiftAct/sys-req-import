@@ -426,12 +426,16 @@ def format_req_body(req):
 
     include_description = config.get("include_description", True)
 
-    # --- Get the description field, supporting both Description and Text ---
+
+    # Case-insensitive detection of description fields
     desc_key = None
-    for candidate in ("Description", "Text"):
-        if candidate in req.get("attributes", {}):
-            desc_key = candidate
+    attrs_lower = {k.lower(): k for k in req.get("attributes", {}).keys()}
+
+    for candidate in ("description", "text"):
+        if candidate in attrs_lower:
+            desc_key = attrs_lower[candidate]   # original key
             break
+
     desc = req.get("attributes", {}).get(desc_key, "(No description found)").strip() if desc_key else "(No description found)"
 
     # Clean embedded Priority mentions
@@ -441,9 +445,14 @@ def format_req_body(req):
 
     # --- Build body ---
     body = f"**Requirement ID:** `{req.get('id', '(No ID)')}`\n\n"
-
-    if include_description and (show_description or show_text):
+    # Only show the description section if the specific attribute (Description or Text)
+    # is enabled in the config AND include_description is true.
+    if include_description and (
+        (desc_key and desc_key.lower() == "description" and show_description) or
+        (desc_key and desc_key.lower() == "text" and show_text)
+    ):
         body += f"### 📝 Description\n{desc}\n\n"
+
 
     # Core values for table
     CORE_VALUES = {
