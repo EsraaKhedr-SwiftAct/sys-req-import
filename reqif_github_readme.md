@@ -59,10 +59,10 @@ In **Repo Settings → Actions → Secrets and variables → New repository secr
   To create Personal Access Token, follow steps **GitHub account → Settings → Developer Settings → Personal access tokens (classic) → Generate new one**.
 
 - `PROJECT_OWNER`  
-*   Set this to your project V2 owner name, e.g., `EsraaKhedr-SwiftAct`.* 
+*   Set this to your project V2 owner name, such as `EsraaKhedr-SwiftAct`.* 
 
 - `PROJECT_TITLE`  
-  *  Set this to your project V2 title, e.g., `@System requirement Project`*
+  *  Set this to your project V2 title, such as  `@System requirement Project`*
 
 ### 6. Replace .reqif  File with your file.
 Place your .reqif file in the root of repo, e.g., `system_requirements.reqif`.
