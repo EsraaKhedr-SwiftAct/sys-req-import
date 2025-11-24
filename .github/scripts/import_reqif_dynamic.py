@@ -60,6 +60,8 @@ def perform_schema_detection(reqif_attrs):
     # Detect new normalized attributes
     for attr_name in sorted(reqif_attrs):
         key = str(attr_name).strip()  # normalized key
+        if key in ("ID", "Title", "Description", "Text"):
+            continue  # never add core fields to config
 
         # ✅ Skip __parent__ and __children__ if they are not in this ReqIF
         if key in ("__parent__", "__children__") and key not in reqif_attrs:
