@@ -60,7 +60,8 @@ def perform_schema_detection(reqif_attrs):
     # Detect new normalized attributes
     for attr_name in sorted(reqif_attrs):
         key = str(attr_name).strip()  # normalized key
-
+        if key in ("ID", "Title", "Description", "Text"):
+            continue
         # ✅ Skip __parent__ and __children__ if they are not in this ReqIF
         if key in ("__parent__", "__children__") and key not in reqif_attrs:
             continue
@@ -419,10 +420,10 @@ def format_req_body(req):
     # Core fields
     CORE_FIELDS = {"ID", "Title", "Description", "Text"}
 
-    show_description = config_attrs.get("Description", {}).get("include_in_body", True)
-    show_text = config_attrs.get("Text", {}).get("include_in_body", True)
-    show_id = config_attrs.get("ID", {}).get("include_in_body", True)
-    show_title = config_attrs.get("Title", {}).get("include_in_body", True)
+    show_description = True # config_attrs.get("Description", {}).get("include_in_body", True)
+    show_text = True #config_attrs.get("Text", {}).get("include_in_body", True)
+    show_id = True #config_attrs.get("ID", {}).get("include_in_body", True)
+    show_title = True #config_attrs.get("Title", {}).get("include_in_body", True)
 
     include_description = config.get("include_description", True)
 
@@ -469,6 +470,8 @@ def format_req_body(req):
 
     filtered_attrs = {}
     for k, v in attrs.items():
+        if k in {"ID", "Title", "Description", "Text"}:
+            continue
         attr_config = config_attrs.get(k, {})
         if attr_config.get("include_in_body", True):
             filtered_attrs[k] = v
