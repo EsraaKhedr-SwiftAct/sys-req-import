@@ -1,6 +1,6 @@
 {
     "attributes": {
-        "Priority": {
+        "Status": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd"
+         xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <THE-HEADER>
+    <REQ-IF-HEADER>
+      <IDENTIFIER>REQIF_HEADER_1</IDENTIFIER>
+      <COMMENT>Generated complex DOORS Next sample</COMMENT>
+      <CREATION-TIME>2025-11-12T10:00:00Z</CREATION-TIME>
+      <REQ-IF-TOOL-ID>IBM DOORS Next</REQ-IF-TOOL-ID>
+      <REQ-IF-VERSION>1.2</REQ-IF-VERSION>
+    </REQ-IF-HEADER>
+  </THE-HEADER>
+
+  <CORE-CONTENT>
+    <REQ-IF-CONTENT>
+
+      <!-- Enumeration definitions -->
+      <DATATYPE-DEFINITION-ENUMERATION IDENTIFIER="DT_StatusEnum" LONG-NAME="StatusEnum">
+        <SPECIFIED-VALUES>
+          <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_Draft" LONG-NAME="Draft"/>
+          <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_Approved" LONG-NAME="Approved"/>
+          <SPEC-ENUMERATION-VALUE IDENTIFIER="ENUM_Rejected" LONG-NAME="Rejected"/>
+        </SPECIFIED-VALUES>
+      </DATATYPE-DEFINITION-ENUMERATION>
+
+      <!-- Attribute definitions -->
+      <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_Title" LONG-NAME="Title"/>
+      <ATTRIBUTE-DEFINITION-XHTML IDENTIFIER="AD_Text" LONG-NAME="Text"/>
+      <ATTRIBUTE-DEFINITION-ENUMERATION IDENTIFIER="AD_Status" LONG-NAME="Status">
+        <TYPE>
+          <DATATYPE-DEFINITION-ENUMERATION-REF>DT_StatusEnum</DATATYPE-DEFINITION-ENUMERATION-REF>
+        </TYPE>
+      </ATTRIBUTE-DEFINITION-ENUMERATION>
+      <ATTRIBUTE-DEFINITION-STRING IDENTIFIER="AD_ID" LONG-NAME="ID"/>
+
+      <!-- SPEC-OBJECT-TYPE (defines which attributes belong to requirements) -->
+      <SPEC-OBJECT-TYPE IDENTIFIER="TYPE_Requirement" LONG-NAME="RequirementType">
+        <SPEC-ATTRIBUTES>
+          <ATTRIBUTE-DEFINITION-STRING-REF>AD_ID</ATTRIBUTE-DEFINITION-STRING-REF>
+          <ATTRIBUTE-DEFINITION-STRING-REF>AD_Title</ATTRIBUTE-DEFINITION-STRING-REF>
+          <ATTRIBUTE-DEFINITION-XHTML-REF>AD_Text</ATTRIBUTE-DEFINITION-XHTML-REF>
+          <ATTRIBUTE-DEFINITION-ENUMERATION-REF>AD_Status</ATTRIBUTE-DEFINITION-ENUMERATION-REF>
+        </SPEC-ATTRIBUTES>
+      </SPEC-OBJECT-TYPE>
+
+      <!-- Requirements -->
+      <SPEC-OBJECT IDENTIFIER="REQ-001" LONG-NAME="REQ-001" TYPE="TYPE_Requirement">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_ID</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>REQ-001</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_Title</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>System shall allow user login</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-XHTML-REF>AD_Text</ATTRIBUTE-DEFINITION-XHTML-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <xhtml:div>
+                <xhtml:p>The system shall support user login with username and password.</xhtml:p>
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+          <ATTRIBUTE-VALUE-ENUMERATION>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-ENUMERATION-REF>AD_Status</ATTRIBUTE-DEFINITION-ENUMERATION-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <ENUM-VALUE-REF>ENUM_Draft</ENUM-VALUE-REF>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-ENUMERATION>
+        </VALUES>
+      </SPEC-OBJECT>
+
+      <SPEC-OBJECT IDENTIFIER="REQ-002" LONG-NAME="REQ-002" TYPE="TYPE_Requirement">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_ID</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>REQ-002</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_Title</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>System shall log failed login attempts</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-XHTML-REF>AD_Text</ATTRIBUTE-DEFINITION-XHTML-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <xhtml:div>
+                <xhtml:p>The system shall log every failed login attempt for auditing purposes.</xhtml:p>
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+          <ATTRIBUTE-VALUE-ENUMERATION>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-ENUMERATION-REF>AD_Status</ATTRIBUTE-DEFINITION-ENUMERATION-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <ENUM-VALUE-REF>ENUM_Approved</ENUM-VALUE-REF>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-ENUMERATION>
+        </VALUES>
+      </SPEC-OBJECT>
+
+      <SPEC-OBJECT IDENTIFIER="REQ-003" LONG-NAME="REQ-003" TYPE="TYPE_Requirement">
+        <VALUES>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_ID</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>REQ-003</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-STRING>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-STRING-REF>AD_Title</ATTRIBUTE-DEFINITION-STRING-REF>
+            </DEFINITION>
+            <THE-VALUE>System shall lock account after 5 failed logins</THE-VALUE>
+          </ATTRIBUTE-VALUE-STRING>
+          <ATTRIBUTE-VALUE-XHTML>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-XHTML-REF>AD_Text</ATTRIBUTE-DEFINITION-XHTML-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <xhtml:div>
+                <xhtml:p>If a user fails to login 5 times, the account shall be locked for 10 minutes.</xhtml:p>
+              </xhtml:div>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-XHTML>
+          <ATTRIBUTE-VALUE-ENUMERATION>
+            <DEFINITION>
+              <ATTRIBUTE-DEFINITION-ENUMERATION-REF>AD_Status</ATTRIBUTE-DEFINITION-ENUMERATION-REF>
+            </DEFINITION>
+            <THE-VALUE>
+              <ENUM-VALUE-REF>ENUM_Draft</ENUM-VALUE-REF>
+            </THE-VALUE>
+          </ATTRIBUTE-VALUE-ENUMERATION>
+        </VALUES>
+      </SPEC-OBJECT>
+
+      <!-- Specification hierarchy -->
+      <SPECIFICATION IDENTIFIER="SPEC-1" LONG-NAME="Login Specification">
+        <CHILDREN>
+          <SPEC-HIERARCHY IDENTIFIER="HIER-1">
+            <OBJECT>
+              <SPEC-OBJECT-REF>REQ-001</SPEC-OBJECT-REF>
+            </OBJECT>
+            <CHILDREN>
+              <SPEC-HIERARCHY IDENTIFIER="HIER-2">
+                <OBJECT>
+                  <SPEC-OBJECT-REF>REQ-002</SPEC-OBJECT-REF>
+                </OBJECT>
+              </SPEC-HIERARCHY>
+              <SPEC-HIERARCHY IDENTIFIER="HIER-3">
+                <OBJECT>
+                  <SPEC-OBJECT-REF>REQ-003</SPEC-OBJECT-REF>
+                </OBJECT>
+              </SPEC-HIERARCHY>
+            </CHILDREN>
+          </SPEC-HIERARCHY>
+        </CHILDREN>
+      </SPECIFICATION>
+
+      <!-- Relations -->
+      <SPEC-RELATION IDENTIFIER="REL-1" LONG-NAME="Depends On">
+        <SOURCE>
+          <SPEC-OBJECT-REF>REQ-003</SPEC-OBJECT-REF>
+        </SOURCE>
+        <TARGET>
+          <SPEC-OBJECT-REF>REQ-001</SPEC-OBJECT-REF>
+        </TARGET>
+      </SPEC-RELATION>
+
+    </REQ-IF-CONTENT>
+  </CORE-CONTENT>
+</REQ-IF>
