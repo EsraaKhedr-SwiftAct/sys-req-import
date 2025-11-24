@@ -1,7 +1,8 @@
 # Tool Overview
 ReqIF to GitHub Synchronization Tool:
 
-This tool processes ReqIF  requirement files and synchronizes their content with a GitHub repository, generating or updating issues, maintaining hierarchy, mapping fields into GitHub Project V2, and optionally closing removed requirements.
+This tool processes ReqIF requirement files which generated from different tools, extract requirements information from it and generate github issue for each requirement. 
+The tool synchronizes requirement files content with a GitHub repository, generating or updating issues, maintaining hierarchy, mapping issues into GitHub Project V2 , and optionally closing removed requirements.
 
 It supports ReqIF exports from:
 
@@ -43,10 +44,13 @@ The **`import_reqif_dynamic.py`** script *imports* and *depends on* **`reqif_par
 ## 📌 How to use this tool
 
 ### 1. Download tool files.
+Clone this repo [Repolink](https://github.com/EsraaKhedr-SwiftAct/sys-req-import) which contain tool files 
 
-### 2. Create your personal repo, past tool files.
-### 3. create new github project, copy of  `https://github.com/users/EsraaKhedr-SwiftAct/projects/5` .
-### 4. Link the project to your github repo.
+### 2. Create your personal repo in github, then paste tool files to your repo.
+
+### 3. create new github project, Make your project as a copy of this project [ProjectLink](https://github.com/users/EsraaKhedr-SwiftAct/projects/5) .
+
+### 4. Link the project to your github repo using **Project Settings → Default repository**.
 
 ### 5. Add Required GitHub Secrets to the Repo.
 Note: this can be done only by the owner of the repo.
