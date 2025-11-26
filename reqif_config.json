@@ -1,18 +1,14 @@
 {
     "attributes": {
-        "Status": {
+        "Category": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": true
+        },
+        "Risk": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },
         "Type": {
-            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
-            "include_in_body": true
-        },
-        "__children__": {
-            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
-            "include_in_body": false
-        },
-        "__parent__": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         }

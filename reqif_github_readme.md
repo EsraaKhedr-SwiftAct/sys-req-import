@@ -61,7 +61,8 @@ In **Repo Settings → Actions → Secrets and variables → New repository secr
   * Set it's value to your (Personal Access Token).
   How to create personal access token?
   To create Personal Access Token, follow steps **GitHub account → Settings → Developer Settings → Personal access tokens (classic) → Generate new one**.
-
+  # Note: Remember to regenerate the Personal Access Token (PAT) upon expiration and update its value.
+  
 - `PROJECT_OWNER`  
 *   Set this to your project V2 owner name, such as `EsraaKhedr-SwiftAct`.* 
 
