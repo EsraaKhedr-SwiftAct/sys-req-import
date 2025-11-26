@@ -4,11 +4,31 @@
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },
+        "Comments": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": true
+        },
         "Risk": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         },
+        "Sources": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": true
+        },
+        "Tag": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": true
+        },
         "Type": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": false
+        },
+        "__children__": {
+            "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
+            "include_in_body": true
+        },
+        "__parent__": {
             "description": "Auto-detected attribute. Change 'include_in_body' to false to hide in GitHub issue body.",
             "include_in_body": true
         }
