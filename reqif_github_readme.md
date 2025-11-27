@@ -1,7 +1,7 @@
 # Tool Overview
 ReqIF to GitHub Synchronization Tool:
 
-This tool processes ReqIF requirement files which generated from different tools, extract requirements information from it and generate github issue for each requirement. 
+This tool processes .ReqIF requirement files which generated from different tools, extract requirements information from it and generate github issue for each requirement. 
 The tool synchronizes requirement files content with a GitHub repository, generating or updating issues, maintaining hierarchy, mapping issues into GitHub Project V2 , and optionally closing removed requirements.
 
 It supports ReqIF exports from:
@@ -27,7 +27,7 @@ Use this tool when you want to:
 
 ---
 
-## Files and Their Roles
+## Tool Files and Their Roles
 
 The synchronization system is comprised of three main files, each with a distinct role:
 
@@ -37,7 +37,7 @@ The synchronization system is comprised of three main files, each with a distinc
 | **`import_reqif_dynamic.py`** | **The Synchronization Logic** (Main Executable) | The primary Python script responsible for the synchronization process. It uses `reqif_parser_full.py` to get the requirement data, loads configuration from `reqif_config.json`, and then communicates with the GitHub GraphQL API to: create new issues, update existing issues with revised content, close issues for removed requirements, and set Project V2 fields (like Status, Priority) based on the requirement attributes. |
 | **`import_reqif.yml`** | **The Automation Trigger** (GitHub Actions Workflow) | A GitHub Actions workflow definition that automates the execution of `import_reqif_dynamic.py`. It is typically configured to run on a push to a specific configuration file (`reqif_config.json`) or manually via a `workflow_dispatch` trigger, allowing the user to specify the ReqIF file to import. It handles environment setup, dependency installation, and secret management. |
 
-### Relationship Summary
+### Relationships of tool files 
 
 The **`import_reqif_dynamic.py`** script *imports* and *depends on* **`reqif_parser_full.py`** to translate the raw ReqIF file into usable requirement objects. The entire process is automated and scheduled by the **`import_reqif.yml`** GitHub Actions workflow, which provides the necessary execution environment and credentials to run the Python synchronization script.
 
@@ -50,12 +50,14 @@ Clone this repo [Repolink](https://github.com/EsraaKhedr-SwiftAct/sys-req-import
 
 ### 3. create new github project, Make your project as a copy of this project [ProjectLink](https://github.com/users/EsraaKhedr-SwiftAct/projects/5) .
 
-### 4. Link the project to your github repo via **Project Settings → Default repository**.
+### 4. Link the project to your github repo:
+
+ In **Project Settings → Default repository**, add your repo.
 
 ### 5. Add Required GitHub Secrets to the Repo.
 Note: this can be done only by the owner of the repo.
 ## Steps: 
-In **Repo Settings → Actions → Secrets and variables → New repository secret**, create the following secrets:
+In **RepoSettings → security tab →  secrets and variables → Actions → repository secrets → New repository secret**, create the following secrets:
 
 - `PAT_TOKEN`  
   * Set it's value to your (Personal Access Token).
@@ -166,15 +168,13 @@ Children: REQ-2.1.1, REQ-2.1.2
 
 ## 📌 Troubleshooting
 - **Missing Attributes:** Enable them in `reqif_config.json`.
-- **Project Fields Not Updated:** Ensure their names exactly match fields in your GitHub Project V2.
+- **Project Fields Not Updated:** Ensure Project V2 fields match the name in process document.
 
 
 ## 📌 Limitations
 - The github action will run only when you push new or edited config file.
 - Extremely large ReqIF files may slow down processing
 - Vendor extensions vary greatly
-- API rate limits from GitHub may apply
-
 
 ## 📌 Additional informations 
 ### **1.Handling `.reqif` Files From Different Vendors**

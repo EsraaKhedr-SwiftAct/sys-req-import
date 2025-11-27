@@ -1068,7 +1068,7 @@ class ReqIFParser:
 
 
 if __name__ == "__main__":
-    parser = ReqIFParser("sample.reqif", extract_attachments=False)
+    parser = ReqIFParser("jama.reqif", extract_attachments=False)
     requirements = parser.parse()
     parser.pretty_print_requirements(requirements)
 
